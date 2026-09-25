@@ -1,0 +1,15 @@
+[build-system]
+requires = ["hatchling>=1.27,<2"]
+build-backend = "hatchling.build"
+
+[project]
+name = "bridge-agent-example"
+version = "0.1.0"
+requires-python = ">=3.13"
+dependencies = ["bridge-agent>=0.1,<0.2"]
+
+[project.entry-points."bridge_agent.plugins"]
+"runtime.example" = "bridge_example:plugin"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/bridge_example"]

@@ -8,6 +8,7 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError
 from yaml.events import AliasEvent, NodeEvent
 from yaml.nodes import MappingNode, Node, ScalarNode
 
+from bridge_agent.bootstrap.packages import load_external
 from bridge_agent.contracts.errors import ConfigurationError
 from bridge_agent.contracts.plugins import PluginDefinition, PreparedPlugin
 
@@ -65,7 +66,8 @@ class _Document(BaseModel):
     model_config = ConfigDict(strict=True, extra="forbid", hide_input_in_errors=True)
 
     version: int = Field(ge=1, le=1)
-    plugins: list[_PluginRow]
+    include: list[str] = Field(default_factory=list)
+    plugins: list[_PluginRow] = Field(default_factory=list)
 
 
 def _validation_message(error: ValidationError) -> str:
@@ -90,8 +92,8 @@ class PluginCatalog:
                 )
             self._definitions[definition.name] = definition
 
-    def load(self, path: Path) -> tuple[PreparedPlugin, ...]:
-        """Validate every row without constructing or activating plugin instances."""
+    @staticmethod
+    def _read(path: Path) -> _Document:
         try:
             source = path.read_text(encoding="utf-8")
         except (OSError, UnicodeError):
@@ -129,13 +131,48 @@ class PluginCatalog:
         except ValidationError as error:
             raise ConfigurationError(f"{path}: {_validation_message(error)}") from None
 
+        return document
+
+    def load(self, path: Path) -> tuple[PreparedPlugin, ...]:
+        """Compose data, then validate every plugin before activation."""
+        rows: list[_PluginRow] = []
+        stack: set[Path] = set()
+        documents = 0
+
+        def visit(source: Path) -> None:
+            nonlocal documents
+            documents += 1
+            if documents > 32:
+                raise ConfigurationError(
+                    "Configuration include document limit exceeded"
+                )
+            source = source.resolve()
+            if source in stack:
+                raise ConfigurationError("Configuration include cycle")
+            stack.add(source)
+            document = self._read(source)
+            for include in document.include:
+                target = (source.parent / include).resolve()
+                if (
+                    not include
+                    or Path(include).is_absolute()
+                    or ".." in Path(include).parts
+                    or not target.is_relative_to(source.parent)
+                ):
+                    raise ConfigurationError("Invalid include path")
+                visit(target)
+            rows.extend(document.plugins)
+            stack.remove(source)
+
+        visit(path)
         prepared: list[PreparedPlugin] = []
         seen: set[str] = set()
-        for row in document.plugins:
+        for row in rows:
             if row.name in seen:
                 raise ConfigurationError(f"{path}: duplicate plugin {row.name}")
             seen.add(row.name)
-            definition = self._definitions.get(row.name)
+            external = load_external(row.name, builtin=row.name in self._definitions)
+            definition = self._definitions.get(row.name) or external
             if definition is None:
                 raise ConfigurationError(f"{path}: unknown plugin {row.name}")
             try:

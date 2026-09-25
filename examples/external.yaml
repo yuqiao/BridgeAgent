@@ -1,0 +1,3 @@
+version: 1
+plugins:
+  - name: runtime.example

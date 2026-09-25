@@ -4,7 +4,7 @@
 
 BridgeAgent 是参考 DeepSeek Harness 架构、使用 Python 独立实现的插件化本地编码助手。
 
-阶段 0、1、3.5、4、5 已完成本地验收；阶段 2 已实现 LangChain Agent 闭环、OpenAI 兼容模型、加法工具、内存 checkpoint 与串行 CLI，真实端点验收尚待通过。使用见 `docs/guides/agent.md`，逐项验收见 `docs/stages/02-agent-loop.md`。以 [阶段路线图](docs/roadmap.md) 和实际代码判断进度，不把计划能力当作已有功能。
+阶段 0、1、3.5、4、5、6 已完成本地验收；阶段 2 已实现 LangChain Agent 闭环、OpenAI 兼容模型、加法工具、内存 checkpoint 与串行 CLI，真实端点验收尚待通过。使用见 `docs/guides/agent.md`，逐项验收见 `docs/stages/02-agent-loop.md`。以 [阶段路线图](docs/roadmap.md) 和实际代码判断进度，不把计划能力当作已有功能。
 
 ## 开始工作前
 

@@ -34,7 +34,8 @@ jobs:
         shell: bash
         run: |
           uv venv .venv-wheel
-          uv pip install --python .venv-wheel/bin/python dist/*.whl
+          uv build examples/external-plugin --out-dir dist-examples
+          uv pip install --python .venv-wheel/bin/python dist/*.whl dist-examples/*.whl
           .venv-wheel/bin/python -I -c "import bridge_agent; from importlib.metadata import version; print(version('bridge-agent'))"
           test "$(.venv-wheel/bin/python -I -m bridge_agent.interfaces.plugin_demo --config examples/plugins.upper.yaml --text Hello)" = 'result: HELLO'
           test "$(.venv-wheel/bin/python -I -m bridge_agent.interfaces.plugin_demo --config examples/plugins.lower.yaml --text Hello)" = 'result: hello'
@@ -46,4 +47,4 @@ jobs:
           fi
           rm "$invalid_config"
       - name: Verify installed Agent CLI with local model endpoint
-        run: BRIDGE_AGENT_CLI_PYTHON="$PWD/.venv-wheel/bin/python" uv run --locked pytest tests/test_agent_cli.py tests/test_workspace_cli.py tests/test_persistent_cli.py tests/test_coding_cli.py
+        run: BRIDGE_AGENT_CLI_PYTHON="$PWD/.venv-wheel/bin/python" uv run --locked pytest tests/test_agent_cli.py tests/test_workspace_cli.py tests/test_persistent_cli.py tests/test_coding_cli.py tests/test_external_plugins.py

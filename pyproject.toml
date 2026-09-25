@@ -24,6 +24,7 @@ dependencies = [
 
 [dependency-groups]
 dev = [
+    "bridge-agent-example",
     "mypy>=1.15,<2",
     "pytest>=8.3,<10",
     "ruff>=0.11,<1",
@@ -36,6 +37,9 @@ packages = ["src/bridge_agent"]
 [[tool.uv.index]]
 url = "https://pypi.org/simple"
 default = true
+
+[tool.uv.sources]
+bridge-agent-example = { path = "examples/external-plugin" }
 
 [tool.ruff]
 target-version = "py313"

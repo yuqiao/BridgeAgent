@@ -55,6 +55,7 @@ dependencies = [
 
 [package.dev-dependencies]
 dev = [
+    { name = "bridge-agent-example" },
     { name = "mypy" },
     { name = "pytest" },
     { name = "ruff" },
@@ -76,11 +77,23 @@ requires-dist = [
 
 [package.metadata.requires-dev]
 dev = [
+    { name = "bridge-agent-example", directory = "examples/external-plugin" },
     { name = "mypy", specifier = ">=1.15,<2" },
     { name = "pytest", specifier = ">=8.3,<10" },
     { name = "ruff", specifier = ">=0.11,<1" },
     { name = "types-pyyaml", specifier = ">=6.0.12.20260906" },
 ]
+
+[[package]]
+name = "bridge-agent-example"
+version = "0.1.0"
+source = { directory = "examples/external-plugin" }
+dependencies = [
+    { name = "bridge-agent" },
+]
+
+[package.metadata]
+requires-dist = [{ name = "bridge-agent", specifier = ">=0.1,<0.2" }]
 
 [[package]]
 name = "certifi"
