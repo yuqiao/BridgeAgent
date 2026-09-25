@@ -2,8 +2,11 @@
 
 目标：构建一个参考 DeepSeek Harness 的可插件化 Agent。
 
-**当前阶段：仅初始化 Python 工程。** 尚未实现 Agent 循环、模型调用、
-工具执行或插件发现机制，运行时依赖为空。后续根据具体需求确定插件协议和模块划分。
+**当前阶段：工程初始化与架构设计已完成。** 尚未实现 Agent 循环、模型调用、
+工具执行或插件发现机制，运行时依赖为空。后续按已确定的分层和路线图逐阶段实现。
+
+架构讨论、技术栈与阶段路线图见 [设计文档](docs/README.md)。
+面向编码 Agent 的仓库指南见 [AGENTS.md](AGENTS.md)。
 
 ## 开发环境
 
@@ -61,6 +64,8 @@ BridgeAgent/
 ├── .github/workflows/ci.yml  # 静态检查、构建、安装验证
 ├── .editorconfig            # 编辑器基础格式约定
 ├── .python-version          # 开发 Python 版本
+├── AGENTS.md                # 编码 Agent 的仓库指南
+├── docs/                    # 架构、路线图、术语与决策
 ├── pyproject.toml           # 包元数据、依赖和工具配置
 ├── uv.lock                  # uv 生成的依赖锁文件
 ├── src/bridge_agent/
