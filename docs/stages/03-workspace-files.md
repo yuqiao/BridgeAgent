@@ -71,4 +71,4 @@ C10：显式执行 `pytest tests/test_workspace_live.py --run-live --tb=short`�
 
 ### 阶段 7.5 真实复验（2026-09-25）
 
-显式执行 `pytest tests/test_agent_live.py tests/test_workspace_live.py --run-live -q`：仓库验收 **1 passed**，加法/追问验收 **1 failed**（RateLimitError）。C10 实际执行 read_file，读取临时 answer.py 并在最终回答中返回 42、文件名与第 2 行，所有断言通过。保留 stage3 当时未通过的历史记录；现在 C10 已关闭，阶段 2 B11 独立保持未通过。未更换模型、地址或凭据。
+显式执行 `pytest tests/test_agent_live.py tests/test_workspace_live.py --run-live -q`：仓库验收 **1 passed**，加法/追问验收 **1 failed**（RateLimitError）。C10 实际执行 read_file，读取临时 answer.py 并在最终回答中返回 42、文件名与第 2 行，所有断言通过。保留 stage3 当时未通过的历史记录；该次复验关闭 C10，B11 当时仍未通过（后续已通过，见阶段 2 最新记录）。未更换模型、地址或凭据。

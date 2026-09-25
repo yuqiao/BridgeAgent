@@ -1,6 +1,6 @@
 # BridgeAgent 设计文档
 
-项目目标：参考 DeepSeek Harness，分阶段实现原生 Python 插件化 Agent。所有已编号阶段的代码与本地验收已完成；真实仓库问答已通过，阶段 2 B11 加法与同会话追问仍受限流影响，详见 [路线图](roadmap.md)。
+项目目标：参考 DeepSeek Harness，分阶段实现原生 Python 插件化 Agent。所有已编号阶段的代码与本地验收已完成；真实仓库问答及阶段 2 B11 加法与同会话追问均已通过，详见 [路线图](roadmap.md)。
 
 动态插件、热重载与完整编码助手见 [动态插件指南](guides/dynamic-plugins.md)。
 

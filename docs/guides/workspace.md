@@ -11,7 +11,7 @@ uv run --locked python -m bridge_agent.interfaces.agent \
   --show-tools
 ```
 
-去掉 `--prompt` 即可串行多轮交互，支持 `/new`、`/exit` 和 EOF。凭据仍读取 `.env` 中的三个 OPENAI 环境变量；模型必须支持工具调用。2026-09-25 真实 read_file 闭环与文件位置引用已通过；加法/多轮的独立真实验收仍限流，端点可用性并不稳定。
+去掉 `--prompt` 即可串行多轮交互，支持 `/new`、`/exit` 和 EOF。凭据仍读取 `.env` 中的三个 OPENAI 环境变量；模型必须支持工具调用。2026-09-25 真实 read_file 闭环与文件位置引用已通过；后续加法/多轮独立真实验收也已通过；历史限流记录保留在阶段 2 文档。
 
 `files.local` 提供框架无关的 `WorkspaceFiles`，`tools.workspace` 将它适配为 `list_files`、`read_file`、`search_files`。`read_file` 返回 `{path, lines: [{number, text}], truncated}`；搜索返回 `{hits: [{path, line, text}], truncated}`。行号从 1 开始，搜索按字面文本匹配。模型回答中的引用仍须与工具结果核对。
 

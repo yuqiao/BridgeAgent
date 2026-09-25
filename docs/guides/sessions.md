@@ -54,4 +54,4 @@ uv run --locked python -m bridge_agent.interfaces.agent \
 uv run --locked pytest tests/test_persistent_sessions.py tests/test_persistent_cli.py
 ```
 
-测试包括独立进程重启、SIGKILL 中断、不重放、占用与关闭释放，不访问真实模型。真实模型工具限流状态仍见阶段 2/3 验收记录。
+测试包括独立进程重启、SIGKILL 中断、不重放、占用与关闭释放，不访问真实模型。阶段 2/3 的真实模型验收已通过；这不替代本节对跨进程持久恢复的独立测试。

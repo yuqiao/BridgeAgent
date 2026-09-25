@@ -2,7 +2,7 @@
 
 目标：构建一个参考 DeepSeek Harness 的可插件化 Agent。
 
-**当前状态：阶段 0–7 的代码与本地验收已完成。** 支持只读问答、Skills、SQLite 会话恢复、审批后的文件修改和命名命令、独立插件包，以及 Cordis 风格动态插件机制。真实仓库问答已通过；加法工具与同会话追问的验收仍受端点限流影响，状态见 [阶段 2](docs/stages/02-agent-loop.md) 与 [路线图](docs/roadmap.md)。
+**当前状态：阶段 0–7 的代码与本地验收已完成。** 支持只读问答、Skills、SQLite 会话恢复、审批后的文件修改和命名命令、独立插件包，以及 Cordis 风格动态插件机制。真实仓库问答、加法工具与同会话追问验收均已通过，状态见 [阶段 2](docs/stages/02-agent-loop.md) 与 [路线图](docs/roadmap.md)。
 
 动态装配、作用域、事件和热重载见 [动态插件指南](docs/guides/dynamic-plugins.md)，无需密钥即可体验：
 

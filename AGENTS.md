@@ -4,11 +4,11 @@
 
 BridgeAgent 是参考 DeepSeek Harness 架构、使用 Python 独立实现的插件化本地编码助手。
 
-阶段 0–7 的代码与本地验收已完成（含 3.5、7.1–7.5）；阶段 2 已实现 LangChain Agent 闭环、OpenAI 兼容模型、加法工具、内存 checkpoint 与串行 CLI，真实端点验收尚待通过。使用见 `docs/guides/agent.md`，逐项验收见 `docs/stages/02-agent-loop.md`。以 [阶段路线图](docs/roadmap.md) 和实际代码判断进度，不把计划能力当作已有功能。
+阶段 0–7 的代码与本地验收已完成（含 3.5、7.1–7.5）；阶段 2 已实现 LangChain Agent 闭环、OpenAI 兼容模型、加法工具、内存 checkpoint 与串行 CLI，B11 真实工具闭环与同会话追问验收已通过。使用见 `docs/guides/agent.md`，逐项验收见 `docs/stages/02-agent-loop.md`。以 [阶段路线图](docs/roadmap.md) 和实际代码判断进度，不把计划能力当作已有功能。
 
 ## 开始工作前
 
-阶段 4 已支持 SQLite checkpoint 与跨进程会话恢复，见 `docs/guides/sessions.md`；只允许续接已完成且兼容的会话。阶段 3.5 基础 Skill 已实现，见 `docs/guides/skills.md` 与 `examples/skills.yaml`。阶段 3 只读文件能力与工具已实现，使用 `examples/workspace.yaml`，见 `docs/guides/workspace.md`；阶段 3 C10 真实读取验收已通过，阶段 2 B11 仍限流。阶段 3–7 的测试边界与行为约定已全部确认，见 `docs/stages/03-07-delivery-plan.md`。用户已授权逐阶段 TDD、review、提交、push 和 tag，无需重复询问例行发布。
+阶段 4 已支持 SQLite checkpoint 与跨进程会话恢复，见 `docs/guides/sessions.md`；只允许续接已完成且兼容的会话。阶段 3.5 基础 Skill 已实现，见 `docs/guides/skills.md` 与 `examples/skills.yaml`。阶段 3 只读文件能力与工具已实现，使用 `examples/workspace.yaml`，见 `docs/guides/workspace.md`；阶段 3 C10 真实读取及阶段 2 B11 工具/追问验收均已通过。阶段 3–7 的测试边界与行为约定已全部确认，见 `docs/stages/03-07-delivery-plan.md`。用户已授权逐阶段 TDD、review、提交、push 和 tag，无需重复询问例行发布。
 
 - 先查看 `git status --short`，保留已有修改。
 - 阅读 [目标架构](docs/architecture.md)、[阶段路线图](docs/roadmap.md) 和 [领域术语](docs/CONTEXT.md)。技术选择见 [技术栈](docs/tech-stack.md)，决策理由见 [文档索引](docs/README.md) 中的 ADR。

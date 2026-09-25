@@ -48,7 +48,7 @@ description: 用一句话说明何时使用这个 Skill。
 
 单次资料读取最多 200 行、16,000 文本字符；用 start_line 继续读取。SKILL.md 正文加载首期要求整个文档在一次读取窗口内，超出则拒绝，建议把长内容拆成参考资料。目录列表若被遍历预算或 200 条结果限制截断，发现会报错，不能把不完整目录当成完整 Skill 列表。
 
-真实模型工具端点当前仍存在限流；本阶段提供确定性模型与实际 CLI 的闭环验证，不承诺模型一定遵循所有自然语言步骤。
+阶段 2/3 的真实模型工具验收均已通过，历史限流见各阶段记录。本阶段 Skill 行为由确定性模型与实际 CLI 验证，不承诺模型一定遵循所有自然语言步骤。
 
 ```bash
 uv run --locked pytest tests/test_skills.py tests/test_skill_agent.py tests/test_workspace_cli.py
