@@ -46,3 +46,7 @@
 - `test_agent_live.py`：只有显式 `--run-live` 才读取项目 `.env` 并调用真实端点；文件值优先，避免全局凭据干扰。
 
 阶段 2 逐个行为执行 red → green。公开替换接口和框架本身已支持的行为直接通过时，作为验收证据，不制造虚假的失败。真实服务未通过时保留失败，不将其改为跳过或使用模拟结果替代。
+
+## 阶段 3
+
+边界已统一确认于 `docs/stages/03-07-delivery-plan.md`。`test_workspace_files.py` 经 WorkspaceFiles 验证真实文件、统一策略和限额；`test_workspace_agent.py` 经 YAML/宿主/AgentRuntime 验证装配、替换与实际工具闭环；`test_workspace_cli.py` 使用真实子进程与本地模型端点。`test_workspace_live.py` 显式启用真实模型，仅发送临时生成的代码。

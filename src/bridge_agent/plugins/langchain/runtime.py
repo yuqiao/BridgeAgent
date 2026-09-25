@@ -38,6 +38,7 @@ class LangChainRuntime:
         max_model_calls: int = 8,
         timeout_seconds: float = 60,
         system_prompt: str = "You are a helpful assistant. Use available tools for arithmetic.",
+        workspace: Path | None = None,
     ) -> None:
         self._agent = create_agent(
             model=model,
@@ -54,7 +55,7 @@ class LangChainRuntime:
         self._failed_sessions: set[str] = set()
         self._busy = False
         self._timeout_seconds = timeout_seconds
-        self._workspace: Path | None = None
+        self._workspace = workspace.resolve() if workspace is not None else None
 
     async def run(self, request: RunRequest) -> RunResult:
         if self._busy:

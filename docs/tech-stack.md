@@ -43,3 +43,7 @@ LangChain 的 `create_agent` 提供基于 LangGraph 的 Agent 执行循环，支
 - checkpoint 的持久化后端、恢复点范围和执行日志的具体字段。
 
 已接入的模型适配使用 OpenAI SDK；Web 框架、数据库和插件发现库待对应阶段再引入。
+
+## 阶段 3 文件规则
+
+使用 PathSpec 1.1.1 的 GitIgnoreSpec 处理 .gitignore 模式，已通过 uv 加为直接依赖并锁定。父目录排除、嵌套规则与固定敏感路径策略由文件 provider 统一应用；范围和限制见 [只读仓库指南](guides/workspace.md)。

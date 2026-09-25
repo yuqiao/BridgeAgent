@@ -2,6 +2,7 @@
 
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
+from pathlib import Path
 
 from langchain_core.tools import tool
 from langgraph.checkpoint.memory import InMemorySaver
@@ -46,6 +47,7 @@ class RuntimeConfig(EmptyConfig):
 @dataclass
 class RuntimePlugin:
     config: RuntimeConfig
+    workspace: Path | None = None
 
     async def activate(self, context: PluginContext) -> None:
         tools = context.require(TOOLS)
@@ -56,6 +58,7 @@ class RuntimePlugin:
             max_model_calls=self.config.max_model_calls,
             timeout_seconds=self.config.timeout_seconds,
             system_prompt=self.config.system_prompt,
+            workspace=self.workspace,
         )
         context.provide(AGENT_RUNTIME, runtime)
 
@@ -83,3 +86,16 @@ RUNTIME = PluginDefinition(
     requires=(MODEL, TOOLS, CHECKPOINT),
     provides=(AGENT_RUNTIME,),
 )
+
+
+def runtime_definition(workspace: Path | None) -> PluginDefinition:
+    def prepare(config: Mapping[str, object]) -> Callable[[], Plugin]:
+        parsed = RuntimeConfig.model_validate(dict(config))
+        return lambda: RuntimePlugin(parsed, workspace)
+
+    return PluginDefinition(
+        "runtime.langchain",
+        prepare,
+        requires=(MODEL, TOOLS, CHECKPOINT),
+        provides=(AGENT_RUNTIME,),
+    )

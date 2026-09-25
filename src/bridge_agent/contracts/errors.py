@@ -51,3 +51,7 @@ class PluginActivationError(BridgeAgentError):
 
 class PluginCleanupError(BridgeAgentError):
     """A cleanup failed; its original exception is preserved as the cause."""
+
+
+class WorkspaceAccessError(BridgeAgentError):
+    """A workspace operation was rejected or could not be completed."""

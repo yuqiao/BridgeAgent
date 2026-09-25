@@ -21,7 +21,7 @@ def _print_result(result: RunResult, show_tools: bool) -> None:
 
 async def run(arguments: argparse.Namespace) -> int:
     environment = read_environment(arguments.env_file, override=arguments.env_override)
-    catalog = agent_catalog(environment=environment)
+    catalog = agent_catalog(environment=environment, workspace=arguments.workspace)
     async with PluginHost(catalog.load(arguments.config)) as host:
         session = AgentSession(host.resolve(AGENT_RUNTIME), arguments.workspace)
         if arguments.prompt is not None:

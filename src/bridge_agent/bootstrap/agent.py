@@ -9,18 +9,33 @@ from dotenv import dotenv_values
 from bridge_agent.bootstrap.config import PluginCatalog
 from bridge_agent.contracts.errors import ConfigurationError
 from bridge_agent.contracts.plugins import PluginDefinition
-from bridge_agent.plugins.langchain.builtin import ARITHMETIC, MEMORY, RUNTIME
+from bridge_agent.plugins.langchain.builtin import (
+    ARITHMETIC,
+    MEMORY,
+    runtime_definition,
+)
 from bridge_agent.plugins.langchain.openai_model import openai_definition
+from bridge_agent.plugins.langchain.workspace_tools import WORKSPACE_TOOLS
+from bridge_agent.plugins.workspace import files_definition
 
 
 def agent_catalog(
     extra: Iterable[PluginDefinition] = (),
     *,
     environment: Mapping[str, str] | None = None,
+    workspace: Path | None = None,
 ) -> PluginCatalog:
     values = dict(os.environ) if environment is None else environment
     return PluginCatalog(
-        (ARITHMETIC, MEMORY, RUNTIME, openai_definition(values), *extra)
+        (
+            ARITHMETIC,
+            MEMORY,
+            runtime_definition(workspace),
+            openai_definition(values),
+            files_definition(workspace),
+            WORKSPACE_TOOLS,
+            *extra,
+        )
     )
 
 

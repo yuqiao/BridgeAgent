@@ -2,11 +2,12 @@
 
 目标：构建一个参考 DeepSeek Harness 的可插件化 Agent。
 
-**当前阶段：阶段 1 已完成；阶段 2 Agent 闭环已实现，真实端点验收进行中。**
+**当前阶段：阶段 1 已完成；阶段 2/3 已实现 Agent 闭环和只读仓库工具，真实端点验收受限流阻塞。**
 支持 YAML 插件装配、LangChain 运行时、OpenAI 兼容模型、加法工具和内存多轮会话。
 真实端点当前返回限流，验收状态见 [阶段 2](docs/stages/02-agent-loop.md)。完整 Cordis 风格动态插件机制在阶段 7 实现。
 
 架构讨论、技术栈与阶段路线图见 [设计文档](docs/README.md)。
+只读仓库问答见 [使用指南](docs/guides/workspace.md)，配置为 `examples/workspace.yaml`。
 面向编码 Agent 的仓库指南见 [AGENTS.md](AGENTS.md)。
 
 ## 开发环境
