@@ -247,3 +247,104 @@ def test_old_disposer_cannot_remove_a_later_listener_with_the_same_name():
             assert calls == ["second"]
 
     asyncio.run(scenario())
+
+
+def test_service_get_set_and_dispatch_extension_points():
+    from bridge_agent.contracts.plugins import ServiceKey
+
+    key = ServiceKey[str]("intercepted")
+    seen = []
+
+    class Observer:
+        async def activate(self, context):
+            context.on(
+                "internal.get",
+                lambda ctx, target, next: next().upper() if target is key else next(),
+            )
+            context.on(
+                "internal.set",
+                lambda ctx, target, value, next: (seen.append(value), next())[1],
+            )
+            context.on("internal.dispatch", lambda mode, name, args: seen.append(name))
+
+    class Provider:
+        async def activate(self, context):
+            context.provide(key, "hello")
+
+    async def scenario():
+        async with DynamicHost() as host:
+            await host.mount(
+                "observer", PluginDefinition("observer", lambda config: Observer)
+            )
+            await host.mount(
+                "value",
+                PluginDefinition("value", lambda config: Provider, provides=(key,)),
+            )
+            assert host.context.require(key) == "HELLO"
+            host.context.emit("custom")
+            assert seen == ["hello", "custom"]
+
+    asyncio.run(scenario())
+
+
+def test_unmount_waits_for_an_effect_disposal_already_in_progress():
+    import pytest
+
+    started = asyncio.Event()
+    finish = asyncio.Event()
+    disposers = []
+
+    class Plugin:
+        async def activate(self, context):
+            async def cleanup():
+                started.set()
+                await finish.wait()
+
+            disposers.append(await context.effect(lambda: cleanup))
+
+    async def scenario():
+        async with DynamicHost() as host:
+            await host.mount(
+                "effect", PluginDefinition("effect", lambda config: Plugin)
+            )
+            disposing = asyncio.create_task(disposers[0]())
+            await started.wait()
+            unmounting = asyncio.create_task(host.unmount("effect"))
+            try:
+                with pytest.raises(TimeoutError):
+                    await asyncio.wait_for(asyncio.shield(unmounting), 0.02)
+            finally:
+                finish.set()
+                await asyncio.gather(disposing, unmounting)
+
+    asyncio.run(scenario())
+
+
+def test_listener_registration_can_be_replaced_with_owned_disposer():
+    calls = []
+
+    class Hook:
+        async def activate(self, context):
+            def intercept(owner, name, callback):
+                if name == "blocked":
+                    calls.append("intercepted")
+                    return lambda: calls.append("disposed")
+                return None
+
+            context.on("internal.listener", intercept)
+
+    class Listener:
+        async def activate(self, context):
+            context.on("blocked", lambda: calls.append("called"))
+
+    async def scenario():
+        async with DynamicHost() as host:
+            await host.mount("hook", PluginDefinition("hook", lambda config: Hook))
+            await host.mount(
+                "listener", PluginDefinition("listener", lambda config: Listener)
+            )
+            host.context.emit("blocked")
+            await host.unmount("listener")
+            assert calls == ["intercepted", "disposed"]
+
+    asyncio.run(scenario())

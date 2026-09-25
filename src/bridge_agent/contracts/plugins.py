@@ -72,6 +72,10 @@ class PluginDefinition:
     prepare: Callable[[Mapping[str, object]], Callable[[], Plugin]]
     requires: tuple[ServiceIdentity, ...] = ()
     provides: tuple[ServiceIdentity, ...] = ()
+    volatile_fields: tuple[str, ...] = ()
+    validate_config: Callable[[Mapping[str, object]], Mapping[str, object]] | None = (
+        None
+    )
 
 
 @dataclass(frozen=True)

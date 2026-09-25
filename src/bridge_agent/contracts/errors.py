@@ -63,3 +63,7 @@ class SkillError(BridgeAgentError):
 
 class ActionError(BridgeAgentError):
     """A workspace change or command was denied or failed."""
+
+
+class RestartRequired(BridgeAgentError):
+    """A shared framework or contract module changed; in-process reload is unsafe."""

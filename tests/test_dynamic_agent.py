@@ -55,3 +55,45 @@ def test_agent_run_can_be_wrapped_by_a_plugin(tmp_path):
             assert (await session.ask("again")).text == "answer"
 
     asyncio.run(scenario())
+
+
+def test_running_agent_holds_a_lease_until_the_call_finishes(tmp_path):
+    import pytest
+
+    from bridge_agent.contracts.agent import AGENT_RUNTIME
+    from bridge_agent.contracts.errors import HostStateError
+
+    started = asyncio.Event()
+    finish = asyncio.Event()
+
+    class Runtime:
+        async def run(self, request):
+            started.set()
+            await finish.wait()
+            return RunResult("finished")
+
+    class Plugin:
+        async def activate(self, context):
+            context.provide(AGENT_RUNTIME, Runtime())
+
+    async def scenario():
+        async with DynamicHost(drain_timeout=0.02) as host:
+            await host.mount(
+                "runtime",
+                PluginDefinition(
+                    "runtime", lambda config: Plugin, provides=(AGENT_RUNTIME,)
+                ),
+            )
+            task = asyncio.create_task(
+                AgentSession(DynamicAgentRuntime(host), tmp_path).ask("hello")
+            )
+            await started.wait()
+            try:
+                with pytest.raises(HostStateError, match="in-flight"):
+                    await host.unmount("runtime")
+            finally:
+                finish.set()
+                assert (await task).text == "finished"
+            await host.unmount("runtime")
+
+    asyncio.run(scenario())

@@ -10,7 +10,11 @@ from yaml.nodes import MappingNode, Node, ScalarNode
 
 from bridge_agent.bootstrap.packages import load_external
 from bridge_agent.contracts.errors import ConfigurationError
-from bridge_agent.contracts.plugins import PluginDefinition, PreparedPlugin
+from bridge_agent.contracts.plugins import (
+    PluginDefinition,
+    PreparedPlugin,
+    ServiceIdentity,
+)
 
 
 class _DataError(yaml.MarkedYAMLError):
@@ -92,40 +96,26 @@ class PluginCatalog:
                 )
             self._definitions[definition.name] = definition
 
+    @property
+    def service_keys(self) -> tuple[ServiceIdentity, ...]:
+        return tuple(
+            dict.fromkeys(
+                key
+                for definition in self._definitions.values()
+                for key in (*definition.requires, *definition.provides)
+            )
+        )
+
+    def definition(self, name: str) -> PluginDefinition:
+        external = load_external(name, builtin=name in self._definitions)
+        result = self._definitions.get(name) or external
+        if result is None:
+            raise ConfigurationError(f"unknown plugin {name}")
+        return result
+
     @staticmethod
     def _read(path: Path) -> _Document:
-        try:
-            source = path.read_text(encoding="utf-8")
-        except (OSError, UnicodeError):
-            raise ConfigurationError(
-                f"{path}: cannot read UTF-8 configuration"
-            ) from None
-        try:
-            for event in yaml.parse(source, Loader=_DataLoader):
-                if isinstance(event, AliasEvent) or (
-                    isinstance(event, NodeEvent) and event.anchor is not None
-                ):
-                    mark = event.start_mark
-                    location = f":{mark.line + 1}:{mark.column + 1}" if mark else ""
-                    raise ConfigurationError(
-                        f"{path}{location}: YAML anchors and aliases are not supported"
-                    )
-            raw: object = yaml.load(source, Loader=_DataLoader)
-        except yaml.YAMLError as error:
-            location = ""
-            if (
-                isinstance(error, yaml.MarkedYAMLError)
-                and error.problem_mark is not None
-            ):
-                mark = error.problem_mark
-                location = f":{mark.line + 1}:{mark.column + 1}"
-            # Parser exception strings can contain full source lines, including secrets.
-            detail = (
-                error.problem
-                if isinstance(error, _DataError)
-                else "invalid or unsupported YAML"
-            )
-            raise ConfigurationError(f"{path}{location}: {detail}") from None
+        raw = read_yaml(path)
         try:
             document = _Document.model_validate(raw)
         except ValidationError as error:
@@ -171,10 +161,10 @@ class PluginCatalog:
             if row.name in seen:
                 raise ConfigurationError(f"{path}: duplicate plugin {row.name}")
             seen.add(row.name)
-            external = load_external(row.name, builtin=row.name in self._definitions)
-            definition = self._definitions.get(row.name) or external
-            if definition is None:
-                raise ConfigurationError(f"{path}: unknown plugin {row.name}")
+            try:
+                definition = self.definition(row.name)
+            except ConfigurationError as error:
+                raise ConfigurationError(f"{path}: {error}") from None
             try:
                 factory = definition.prepare(row.config)
             except ValidationError as error:
@@ -191,3 +181,34 @@ class PluginCatalog:
                 )
             )
         return tuple(prepared)
+
+
+def read_yaml(path: Path) -> object:
+    try:
+        source = path.read_text(encoding="utf-8")
+    except (OSError, UnicodeError):
+        raise ConfigurationError(f"{path}: cannot read UTF-8 configuration") from None
+    try:
+        for event in yaml.parse(source, Loader=_DataLoader):
+            if isinstance(event, AliasEvent) or (
+                isinstance(event, NodeEvent) and event.anchor is not None
+            ):
+                mark = event.start_mark
+                location = f":{mark.line + 1}:{mark.column + 1}" if mark else ""
+                raise ConfigurationError(
+                    f"{path}{location}: YAML anchors and aliases are not supported"
+                )
+        raw: object = yaml.load(source, Loader=_DataLoader)
+    except yaml.YAMLError as error:
+        location = ""
+        if isinstance(error, yaml.MarkedYAMLError) and error.problem_mark is not None:
+            mark = error.problem_mark
+            location = f":{mark.line + 1}:{mark.column + 1}"
+        # Parser exception strings can contain full source lines, including secrets.
+        detail = (
+            error.problem
+            if isinstance(error, _DataError)
+            else "invalid or unsupported YAML"
+        )
+        raise ConfigurationError(f"{path}{location}: {detail}") from None
+    return raw

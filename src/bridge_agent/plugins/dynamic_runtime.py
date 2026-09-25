@@ -7,13 +7,16 @@ from bridge_agent.kernel.dynamic import Context, DynamicHost
 
 class DynamicAgentRuntime:
     def __init__(self, host: DynamicHost, context: Context | None = None) -> None:
+        self._host = host
         self._context = context or host.context
 
     async def run(self, request: RunRequest) -> RunResult:
-        async def execute() -> RunResult:
-            return await self._context.require(AGENT_RUNTIME).run(request)
+        async with self._host.lease(self._context):
 
-        result = await self._context.waterfall("agent.run", request, next=execute)
-        if not isinstance(result, RunResult):
-            raise PluginProtocolError("Agent extension must return RunResult")
-        return result
+            async def execute() -> RunResult:
+                return await self._context.require(AGENT_RUNTIME).run(request)
+
+            result = await self._context.waterfall("agent.run", request, next=execute)
+            if not isinstance(result, RunResult):
+                raise PluginProtocolError("Agent extension must return RunResult")
+            return result

@@ -66,12 +66,14 @@ class Events[T]:
     def emit(
         self, name: str, args: tuple[object, ...], where: Callable[[T], bool] | None
     ) -> None:
+        self._trace("emit", name, args)
         for callback in self._callbacks(name, where):
             synchronous(callback, *args)
 
     def bail(
         self, name: str, args: tuple[object, ...], where: Callable[[T], bool] | None
     ) -> object:
+        self._trace("bail", name, args)
         for callback in self._callbacks(name, where):
             result = synchronous(callback, *args)
             if result is not None and result is not False:
@@ -81,6 +83,7 @@ class Events[T]:
     async def serial(
         self, name: str, args: tuple[object, ...], where: Callable[[T], bool] | None
     ) -> object:
+        self._trace("serial", name, args)
         for callback in self._callbacks(name, where):
             result = await invoke(callback, *args)
             if result is not None and result is not False:
@@ -90,6 +93,7 @@ class Events[T]:
     async def parallel(
         self, name: str, args: tuple[object, ...], where: Callable[[T], bool] | None
     ) -> None:
+        self._trace("parallel", name, args)
         results = await asyncio.gather(
             *(invoke(cb, *args) for cb in self._callbacks(name, where)),
             return_exceptions=True,
@@ -98,6 +102,26 @@ class Events[T]:
         if errors:
             raise BaseExceptionGroup("Event listeners failed", errors)
 
+    def waterfall_sync(
+        self,
+        name: str,
+        args: tuple[object, ...],
+        next: Listener,
+        where: Callable[[T], bool] | None = None,
+    ) -> object:
+        callbacks = self._callbacks(name, where)
+
+        def step(index: int) -> object:
+            if index == len(callbacks):
+                return synchronous(next)
+            return synchronous(callbacks[index], *args, lambda: step(index + 1))
+
+        return step(0)
+
+    def _trace(self, mode: str, name: str, args: tuple[object, ...]) -> None:
+        if not name.startswith("internal."):
+            self.emit("internal.dispatch", (mode, name, args), None)
+
     async def waterfall(
         self,
         name: str,
@@ -105,6 +129,7 @@ class Events[T]:
         next: Listener,
         where: Callable[[T], bool] | None,
     ) -> object:
+        self._trace("waterfall", name, args)
         callbacks = self._callbacks(name, where)
 
         async def step(index: int) -> object:
