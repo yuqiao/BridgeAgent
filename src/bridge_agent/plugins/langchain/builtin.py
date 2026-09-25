@@ -10,6 +10,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from bridge_agent.contracts.agent import AGENT_RUNTIME
 from bridge_agent.contracts.plugins import Plugin, PluginContext, PluginDefinition
+from bridge_agent.contracts.sessions import SESSION_CONTROL
 from bridge_agent.plugins.langchain.runtime import LangChainRuntime
 from bridge_agent.plugins.langchain.services import CHECKPOINT, MODEL, TOOLS
 
@@ -61,6 +62,7 @@ class RuntimePlugin:
             workspace=self.workspace,
         )
         context.provide(AGENT_RUNTIME, runtime)
+        context.provide(SESSION_CONTROL, runtime)
 
 
 def prepare_arithmetic(config: Mapping[str, object]) -> Callable[[], Plugin]:
@@ -84,7 +86,7 @@ RUNTIME = PluginDefinition(
     "runtime.langchain",
     prepare_runtime,
     requires=(MODEL, TOOLS, CHECKPOINT),
-    provides=(AGENT_RUNTIME,),
+    provides=(AGENT_RUNTIME, SESSION_CONTROL),
 )
 
 
@@ -97,5 +99,5 @@ def runtime_definition(workspace: Path | None) -> PluginDefinition:
         "runtime.langchain",
         prepare,
         requires=(MODEL, TOOLS, CHECKPOINT),
-        provides=(AGENT_RUNTIME,),
+        provides=(AGENT_RUNTIME, SESSION_CONTROL),
     )

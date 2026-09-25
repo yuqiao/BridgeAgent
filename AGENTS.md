@@ -8,7 +8,7 @@ BridgeAgent 是参考 DeepSeek Harness 架构、使用 Python 独立实现的插
 
 ## 开始工作前
 
-阶段 3.5 基础 Skill 已实现，见 `docs/guides/skills.md` 与 `examples/skills.yaml`。阶段 3 只读文件能力与工具已实现，使用 `examples/workspace.yaml`，见 `docs/guides/workspace.md`；真实端点仍返回限流。阶段 3–7 的测试边界与行为约定已全部确认，见 `docs/stages/03-07-delivery-plan.md`。用户已授权逐阶段 TDD、review、提交、push 和 tag，无需重复询问例行发布。
+阶段 4 已支持 SQLite checkpoint 与跨进程会话恢复，见 `docs/guides/sessions.md`；只允许续接已完成且兼容的会话。阶段 3.5 基础 Skill 已实现，见 `docs/guides/skills.md` 与 `examples/skills.yaml`。阶段 3 只读文件能力与工具已实现，使用 `examples/workspace.yaml`，见 `docs/guides/workspace.md`；真实端点仍返回限流。阶段 3–7 的测试边界与行为约定已全部确认，见 `docs/stages/03-07-delivery-plan.md`。用户已授权逐阶段 TDD、review、提交、push 和 tag，无需重复询问例行发布。
 
 - 先查看 `git status --short`，保留已有修改。
 - 阅读 [目标架构](docs/architecture.md)、[阶段路线图](docs/roadmap.md) 和 [领域术语](docs/CONTEXT.md)。技术选择见 [技术栈](docs/tech-stack.md)，决策理由见 [文档索引](docs/README.md) 中的 ADR。

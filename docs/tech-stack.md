@@ -47,3 +47,7 @@ LangChain 的 `create_agent` 提供基于 LangGraph 的 Agent 执行循环，支
 ## 阶段 3 文件规则
 
 使用 PathSpec 1.1.1 的 GitIgnoreSpec 处理 .gitignore 模式，已通过 uv 加为直接依赖并锁定。父目录排除、嵌套规则与固定敏感路径策略由文件 provider 统一应用；范围和限制见 [只读仓库指南](guides/workspace.md)。
+
+## 阶段 4 持久存储
+
+使用 langgraph-checkpoint-sqlite 3.1.1 的 AsyncSqliteSaver，配置明确选择 sync durability。适配层接受内存与 SQLite 两种 checkpoint 版本类型；应用与能力接口不导入框架存储类型。SQLite 单宿主文件锁目前支持 macOS/Linux。

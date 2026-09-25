@@ -8,4 +8,5 @@ from bridge_agent.contracts.plugins import ServiceKey
 
 MODEL = ServiceKey[BaseChatModel]("langchain.model")
 TOOLS = ServiceKey[tuple[BaseTool, ...]]("langchain.tools")
-CHECKPOINT = ServiceKey[BaseCheckpointSaver[int]]("langchain.checkpoint")
+type Checkpoint = BaseCheckpointSaver[int] | BaseCheckpointSaver[str]
+CHECKPOINT = ServiceKey[Checkpoint]("langchain.checkpoint")

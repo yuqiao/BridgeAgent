@@ -152,6 +152,7 @@ activemq-data/
 .envrc
 .venv
 .venv-wheel/
+.bridge-agent/
 env/
 venv/
 ENV/

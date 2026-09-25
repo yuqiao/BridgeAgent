@@ -54,3 +54,7 @@
 ## 阶段 3.5
 
 `test_skills.py` 在 SkillCatalog 公开方法验证发现、加载、资料范围与错误；`test_skill_agent.py` 用实际宿主和循环验证仅选中正文进入模型上下文；`test_workspace_cli.py` 新增 Skill 参数用例验证独立 CLI 进程。
+
+## 阶段 4
+
+`test_persistent_sessions.py` 通过公开 Agent/SessionControl 与插件宿主验证持久恢复、隔离、兼容与资源归属；`test_persistent_cli.py` 使用独立 CLI 进程验证重启、数据库占用和 SIGKILL 后拒绝重放。状态与历史均来自 checkpoint，测试不直接查询数据库表。

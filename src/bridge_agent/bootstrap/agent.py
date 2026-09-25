@@ -16,6 +16,7 @@ from bridge_agent.plugins.langchain.builtin import (
 )
 from bridge_agent.plugins.langchain.openai_model import openai_definition
 from bridge_agent.plugins.langchain.skill_tools import SKILL_TOOLS
+from bridge_agent.plugins.langchain.sqlite_checkpoint import SQLITE
 from bridge_agent.plugins.langchain.workspace_tools import WORKSPACE_TOOLS
 from bridge_agent.plugins.skill_plugin import SKILLS
 from bridge_agent.plugins.workspace import files_definition
@@ -38,6 +39,7 @@ def agent_catalog(
             WORKSPACE_TOOLS,
             SKILLS,
             SKILL_TOOLS,
+            SQLITE,
             *extra,
         )
     )

@@ -2,13 +2,16 @@
 
 import argparse
 import asyncio
+import json
 import sys
+from dataclasses import asdict
 from pathlib import Path
 
 from bridge_agent.application.agent import AgentSession
 from bridge_agent.bootstrap.agent import agent_catalog, read_environment
 from bridge_agent.contracts.agent import AGENT_RUNTIME, RunResult
-from bridge_agent.contracts.errors import BridgeAgentError
+from bridge_agent.contracts.errors import AgentSessionError, BridgeAgentError
+from bridge_agent.contracts.sessions import SESSION_CONTROL
 from bridge_agent.kernel.host import PluginHost
 
 
@@ -23,12 +26,24 @@ async def run(arguments: argparse.Namespace) -> int:
     environment = read_environment(arguments.env_file, override=arguments.env_override)
     catalog = agent_catalog(environment=environment, workspace=arguments.workspace)
     async with PluginHost(catalog.load(arguments.config)) as host:
-        session = AgentSession(host.resolve(AGENT_RUNTIME), arguments.workspace)
+        if arguments.session_status:
+            info = await host.resolve(SESSION_CONTROL).get_session(arguments.session_id)
+            if info is None:
+                raise AgentSessionError("Session not found")
+            print(json.dumps(asdict(info), default=str))
+            return 0
+        session = AgentSession(
+            host.resolve(AGENT_RUNTIME),
+            arguments.workspace,
+            session_id=arguments.session_id,
+        )
         if arguments.prompt is not None:
             _print_result(await session.ask(arguments.prompt), arguments.show_tools)
             return 0
         reader = asyncio.StreamReader()
         interactive = sys.stdin.isatty()
+        if interactive:
+            print(f"Session: {session.session_id}", file=sys.stderr)
         transport, _ = await asyncio.get_running_loop().connect_read_pipe(
             lambda: asyncio.StreamReaderProtocol(reader), sys.stdin
         )
@@ -47,7 +62,7 @@ async def run(arguments: argparse.Namespace) -> int:
                     session = AgentSession(
                         host.resolve(AGENT_RUNTIME), arguments.workspace
                     )
-                    print("New session", file=sys.stderr)
+                    print(f"New session: {session.session_id}", file=sys.stderr)
                 elif text:
                     try:
                         _print_result(await session.ask(text), arguments.show_tools)
@@ -63,7 +78,10 @@ def _error_lines(error: BaseException) -> list[str]:
     if isinstance(error, BaseExceptionGroup):
         return [line for child in error.exceptions for line in _error_lines(child)]
     if isinstance(error, BridgeAgentError):
-        return [str(error)]
+        lines = [str(error)]
+        if isinstance(error.__cause__, BridgeAgentError):
+            lines.extend(_error_lines(error.__cause__))
+        return lines
     return ["Agent failed; inspect the chained error through the Python interface"]
 
 
@@ -81,7 +99,22 @@ def main() -> int:
         "--prompt", help="Single task; omit for serial chat (/new, /exit)"
     )
     parser.add_argument("--show-tools", action="store_true")
+    parser.add_argument(
+        "--session-id",
+        help="Continue or create this session in the configured checkpoint store",
+    )
+    parser.add_argument(
+        "--session-status",
+        action="store_true",
+        help="Inspect a saved session without calling the model",
+    )
     arguments = parser.parse_args()
+    if arguments.session_status and (
+        not arguments.session_id or arguments.prompt is not None
+    ):
+        parser.error(
+            "--session-status requires --session-id and cannot be used with --prompt"
+        )
     try:
         return asyncio.run(run(arguments))
     except KeyboardInterrupt:

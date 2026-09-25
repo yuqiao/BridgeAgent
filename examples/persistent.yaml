@@ -1,0 +1,15 @@
+version: 1
+plugins:
+  - name: runtime.langchain
+    config:
+      max_model_calls: 12
+      timeout_seconds: 600
+      system_prompt: "You are a read-only repository assistant. Use workspace tools for evidence and cite actual paths and line numbers."
+  - name: model.openai
+    config:
+      timeout_seconds: 600
+  - name: files.local
+  - name: tools.workspace
+  - name: checkpoint.sqlite
+    config:
+      path: .bridge-agent/sessions.sqlite
