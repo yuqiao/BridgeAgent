@@ -1,0 +1,37 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
+        with:
+          version: "0.8.17"
+          enable-cache: true
+      - name: Install Python
+        run: uv python install
+      - name: Install dependencies
+        run: uv sync --locked
+      - name: Lint
+        run: uv run --locked ruff check .
+      - name: Check formatting
+        run: uv run --locked ruff format --check .
+      - name: Check types
+        run: uv run --locked mypy
+      # Add `uv run --locked pytest` when the first feature tests are introduced.
+      - name: Build distributions
+        run: uv build
+      - name: Verify wheel installation
+        shell: bash
+        run: |
+          uv venv .venv-wheel
+          uv pip install --python .venv-wheel/bin/python --no-deps dist/*.whl
+          .venv-wheel/bin/python -I -c "import bridge_agent; from importlib.metadata import version; print(version('bridge-agent'))"
