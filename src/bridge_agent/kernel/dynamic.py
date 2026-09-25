@@ -1,6 +1,7 @@
 """Dynamic service graph, separate from the strict single-use plugin host."""
 
 import asyncio
+import logging
 from collections.abc import Awaitable, Callable, Mapping
 from contextlib import AbstractAsyncContextManager, AbstractContextManager
 from copy import deepcopy
@@ -19,7 +20,13 @@ from bridge_agent.contracts.plugins import (
     ServiceIdentity,
     ServiceKey,
 )
-from bridge_agent.kernel.context import OwnedContext
+from bridge_agent.kernel.context import ContextState, OwnedContext
+from bridge_agent.kernel.events import Events, Listener, invoke
+
+
+@dataclass(frozen=True)
+class Accessor:
+    get: Callable[[], object]
 
 
 @dataclass(frozen=True)
@@ -28,6 +35,21 @@ class PluginStatus:
     plugin: str
     state: str
     missing: tuple[str, ...] = ()
+    effects: tuple[str, ...] = ()
+
+
+class DynamicResources(OwnedContext):
+    def __init__(
+        self, plugin: PreparedPlugin, services: dict[ServiceIdentity, object]
+    ) -> None:
+        super().__init__(plugin, services)
+        self.effects: dict[object, str] = {}
+
+    def _assert_activating(self) -> None:
+        if self.state not in (ContextState.ACTIVATING, ContextState.ACTIVE):
+            raise PluginProtocolError(
+                "Cannot register an effect on an inactive Context"
+            )
 
 
 @dataclass
@@ -37,7 +59,7 @@ class Instance:
     prepared: PreparedPlugin
     scope: "Context"
     state: str = "pending"
-    owned: OwnedContext | None = None
+    owned: DynamicResources | None = None
     values: dict[ServiceIdentity, object] = field(default_factory=dict)
 
 
@@ -45,17 +67,19 @@ class Context:
     def __init__(
         self,
         host: "DynamicHost",
-        owned: OwnedContext | None = None,
+        owned: DynamicResources | None = None,
         labels: Mapping[ServiceIdentity, object] | None = None,
     ) -> None:
         self._host = host
         self._owned = owned
         self._labels = dict(labels or {})
         self._metadata: dict[str, object] = {}
+        self._filter: Callable[[Context], bool] | None = None
         self._intercepts: dict[ServiceIdentity, dict[str, object]] = {}
 
-    def _copy(self, owned: OwnedContext | None = None) -> "Context":
+    def _copy(self, owned: DynamicResources | None = None) -> "Context":
         result = Context(self._host, owned or self._owned, self._labels)
+        result._filter = self._filter
         result._metadata = deepcopy(self._metadata)
         result._intercepts = {
             key: deepcopy(value) for key, value in self._intercepts.items()
@@ -106,10 +130,94 @@ class Context:
 
     def require[T](self, key: ServiceKey[T]) -> T:
         if self._owned is not None:
-            return self._owned.require(key)
+            self._owned.require(key)
         return cast(T, self._host._resolve(key, self))
 
-    def _owner(self) -> OwnedContext:
+    def select(self, predicate: Callable[["Context"], bool]) -> "Context":
+        result = self._copy()
+        result._filter = predicate
+        return result
+
+    def on(
+        self,
+        name: str,
+        callback: Listener,
+        *,
+        prepend: bool = False,
+        once: bool = False,
+        global_: bool = False,
+    ) -> Callable[[], None]:
+        dispose = self._host._events.on(
+            self, name, callback, prepend=prepend, once=once, global_=global_
+        )
+        try:
+            self.on_close(dispose)
+        except BaseException:
+            dispose()
+            raise
+        return dispose
+
+    def once(
+        self,
+        name: str,
+        callback: Listener,
+        *,
+        prepend: bool = False,
+        global_: bool = False,
+    ) -> Callable[[], None]:
+        return self.on(name, callback, prepend=prepend, once=True, global_=global_)
+
+    def emit(self, name: str, *args: object) -> None:
+        self._host._events.emit(name, args, self._filter)
+
+    def bail(self, name: str, *args: object) -> object:
+        return self._host._events.bail(name, args, self._filter)
+
+    async def serial(self, name: str, *args: object) -> object:
+        return await self._host._events.serial(name, args, self._filter)
+
+    async def parallel(self, name: str, *args: object) -> None:
+        await self._host._events.parallel(name, args, self._filter)
+
+    async def waterfall(self, name: str, *args: object, next: Listener) -> object:
+        return await self._host._events.waterfall(name, args, next, self._filter)
+
+    async def effect(
+        self, execute: Listener, *, label: str = "resource"
+    ) -> Callable[[], Awaitable[None]]:
+        owner = self._owner()
+        if owner.state not in (ContextState.ACTIVATING, ContextState.ACTIVE):
+            raise PluginProtocolError("Cannot create effect on inactive Context")
+        cleanup = await invoke(execute)
+        if not callable(cleanup):
+            raise PluginProtocolError("Effect must return a disposer")
+        token = object()
+        owner.effects[token] = label
+
+        async def dispose() -> None:
+            if token in owner.effects:
+                del owner.effects[token]
+                await invoke(cleanup)
+
+        try:
+            self.on_close_async(dispose)
+        except BaseException:
+            await dispose()
+            raise
+        return dispose
+
+    def logger(self, name: str) -> logging.Logger:
+        return logging.getLogger("bridge_agent.plugins." + name)
+
+    def export_logs(self, logger: logging.Logger, handler: logging.Handler) -> None:
+        def dispose() -> None:
+            logger.removeHandler(handler)
+            handler.close()
+
+        self.on_close(dispose)
+        logger.addHandler(handler)
+
+    def _owner(self) -> DynamicResources:
         if self._owned is None:
             raise PluginProtocolError(
                 "Resource registration requires a plugin-owned Context"
@@ -117,7 +225,16 @@ class Context:
         return self._owned
 
     def provide[T](self, key: ServiceKey[T], value: T) -> None:
-        self._owner().provide(key, value)
+        owner = self._owner()
+        if owner.state is not ContextState.ACTIVATING:
+            raise PluginProtocolError("Service publication requires activation")
+        owner.provide(key, value)
+
+    def accessor[T](self, key: ServiceKey[T], getter: Callable[[], T]) -> None:
+        self.provide(cast(ServiceKey[object], key), Accessor(getter))
+
+    def alias[T](self, alias: ServiceKey[T], target: ServiceKey[T]) -> None:
+        self.accessor(alias, lambda: self.require(target))
 
     def on_close(self, callback: Callable[[], None]) -> None:
         self._owner().on_close(callback)
@@ -136,6 +253,7 @@ class Context:
 
 class DynamicHost:
     def __init__(self) -> None:
+        self._events: Events[Context] = Events()
         self.context = Context(self)
         self._instances: dict[str, Instance] = {}
         self._closed = False
@@ -148,7 +266,8 @@ class DynamicHost:
                 and key in instance.definition.provides
                 and instance.scope._label(key) == scope._label(key)
             ):
-                return instance.values[key]
+                value = instance.values[key]
+                return value.get() if isinstance(value, Accessor) else value
         raise PluginProtocolError(f"Service unavailable: {key.name}")
 
     def status(self, instance_id: str) -> PluginStatus:
@@ -160,7 +279,11 @@ class DynamicHost:
             except PluginProtocolError:
                 missing.append(key.name)
         return PluginStatus(
-            instance.id, instance.definition.name, instance.state, tuple(missing)
+            instance.id,
+            instance.definition.name,
+            instance.state,
+            tuple(missing),
+            tuple(instance.owned.effects.values()) if instance.owned else (),
         )
 
     async def mount(
@@ -207,7 +330,7 @@ class DynamicHost:
                     key: self._resolve(key, instance.scope)
                     for key in instance.definition.requires
                 }
-                owned = OwnedContext(instance.prepared, values)
+                owned = DynamicResources(instance.prepared, values)
                 instance.owned = owned
                 instance.values = values
                 instance.state = "loading"

@@ -45,3 +45,5 @@
 7.1 review：覆盖了 core 导出、反射层、logger、volatile、loader 分组和 HMR，特别纠正“waterfall=值流水线”的误读。此阶段只记录设计证据，不为文档制造 TDD 测试。后续逐行为 red→green，再关闭矩阵行。
 
 7.2 实施证据见 [Context 与动态依赖](07.2-dynamic-context.md)，C01–C07 的基础行为已验证；注册表扩展诊断、动态更新在 7.4 收尾。
+
+7.3 证据见 [事件与贡献](07.3-events-effects.md)：C09–C13、C15 与实际 Agent around 已验证，C14 生命周期/配置事件待 7.4。
