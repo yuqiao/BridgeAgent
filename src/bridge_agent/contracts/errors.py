@@ -59,3 +59,7 @@ class WorkspaceAccessError(BridgeAgentError):
 
 class SkillError(BridgeAgentError):
     """A skill could not be discovered, validated, or loaded."""
+
+
+class ActionError(BridgeAgentError):
+    """A workspace change or command was denied or failed."""

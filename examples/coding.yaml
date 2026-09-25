@@ -1,0 +1,18 @@
+version: 1
+plugins:
+  - name: runtime.langchain
+    config: {timeout_seconds: 600}
+  - name: model.openai
+    config: {timeout_seconds: 600}
+  - name: checkpoint.sqlite
+    config: {path: .bridge-agent/coding.sqlite}
+  - name: approval.policy
+  - name: files.editable
+  - name: commands.local
+    config:
+      commands:
+        test: [uv, run, --locked, pytest]
+      timeout_seconds: 600
+  - name: skills.filesystem
+    config: {roots: [examples/skills]}
+  - name: tools.coding-skills

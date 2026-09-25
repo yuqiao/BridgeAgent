@@ -12,6 +12,7 @@ from bridge_agent.bootstrap.agent import agent_catalog, read_environment
 from bridge_agent.contracts.agent import AGENT_RUNTIME, RunResult
 from bridge_agent.contracts.errors import AgentSessionError, BridgeAgentError
 from bridge_agent.contracts.sessions import SESSION_CONTROL
+from bridge_agent.interfaces.approval import ConsoleApproval
 from bridge_agent.kernel.host import PluginHost
 
 
@@ -23,32 +24,42 @@ def _print_result(result: RunResult, show_tools: bool) -> None:
 
 
 async def run(arguments: argparse.Namespace) -> int:
-    environment = read_environment(arguments.env_file, override=arguments.env_override)
-    catalog = agent_catalog(environment=environment, workspace=arguments.workspace)
-    async with PluginHost(catalog.load(arguments.config)) as host:
-        if arguments.session_status:
-            info = await host.resolve(SESSION_CONTROL).get_session(arguments.session_id)
-            if info is None:
-                raise AgentSessionError("Session not found")
-            print(json.dumps(asdict(info), default=str))
-            return 0
-        session = AgentSession(
-            host.resolve(AGENT_RUNTIME),
-            arguments.workspace,
-            session_id=arguments.session_id,
-        )
-        if arguments.prompt is not None:
-            _print_result(await session.ask(arguments.prompt), arguments.show_tools)
-            return 0
-        reader = asyncio.StreamReader()
-        interactive = sys.stdin.isatty()
-        if interactive:
-            print(f"Session: {session.session_id}", file=sys.stderr)
+    reader = asyncio.StreamReader()
+    interactive = sys.stdin.isatty()
+    transport = None
+    if interactive or (arguments.prompt is None and not arguments.session_status):
         transport, _ = await asyncio.get_running_loop().connect_read_pipe(
             lambda: asyncio.StreamReaderProtocol(reader), sys.stdin
         )
-        status = 0
-        try:
+    try:
+        environment = read_environment(
+            arguments.env_file, override=arguments.env_override
+        )
+        catalog = agent_catalog(
+            environment=environment,
+            workspace=arguments.workspace,
+            approval=ConsoleApproval(reader) if interactive else None,
+        )
+        async with PluginHost(catalog.load(arguments.config)) as host:
+            if arguments.session_status:
+                info = await host.resolve(SESSION_CONTROL).get_session(
+                    arguments.session_id
+                )
+                if info is None:
+                    raise AgentSessionError("Session not found")
+                print(json.dumps(asdict(info), default=str))
+                return 0
+            session = AgentSession(
+                host.resolve(AGENT_RUNTIME),
+                arguments.workspace,
+                session_id=arguments.session_id,
+            )
+            if arguments.prompt is not None:
+                _print_result(await session.ask(arguments.prompt), arguments.show_tools)
+                return 0
+            if interactive:
+                print(f"Session: {session.session_id}", file=sys.stderr)
+            status = 0
             while True:
                 if interactive:
                     print("> ", end="", file=sys.stderr, flush=True)
@@ -69,9 +80,10 @@ async def run(arguments: argparse.Namespace) -> int:
                     except BridgeAgentError as error:
                         print(str(error), file=sys.stderr)
                         status = 1
-        finally:
+            return status
+    finally:
+        if transport is not None:
             transport.close()
-        return status
 
 
 def _error_lines(error: BaseException) -> list[str]:

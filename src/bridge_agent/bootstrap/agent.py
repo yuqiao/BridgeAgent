@@ -7,13 +7,16 @@ from pathlib import Path
 from dotenv import dotenv_values
 
 from bridge_agent.bootstrap.config import PluginCatalog
+from bridge_agent.contracts.actions import ApprovalPolicy
 from bridge_agent.contracts.errors import ConfigurationError
 from bridge_agent.contracts.plugins import PluginDefinition
+from bridge_agent.plugins.action_plugins import action_definitions
 from bridge_agent.plugins.langchain.builtin import (
     ARITHMETIC,
     MEMORY,
     runtime_definition,
 )
+from bridge_agent.plugins.langchain.coding_tools import CODING_SKILLS, CODING_TOOLS
 from bridge_agent.plugins.langchain.openai_model import openai_definition
 from bridge_agent.plugins.langchain.skill_tools import SKILL_TOOLS
 from bridge_agent.plugins.langchain.sqlite_checkpoint import SQLITE
@@ -27,6 +30,7 @@ def agent_catalog(
     *,
     environment: Mapping[str, str] | None = None,
     workspace: Path | None = None,
+    approval: ApprovalPolicy | None = None,
 ) -> PluginCatalog:
     values = dict(os.environ) if environment is None else environment
     return PluginCatalog(
@@ -40,6 +44,9 @@ def agent_catalog(
             SKILLS,
             SKILL_TOOLS,
             SQLITE,
+            *action_definitions(workspace, approval),
+            CODING_TOOLS,
+            CODING_SKILLS,
             *extra,
         )
     )

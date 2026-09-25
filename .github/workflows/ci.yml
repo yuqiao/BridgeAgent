@@ -46,4 +46,4 @@ jobs:
           fi
           rm "$invalid_config"
       - name: Verify installed Agent CLI with local model endpoint
-        run: BRIDGE_AGENT_CLI_PYTHON="$PWD/.venv-wheel/bin/python" uv run --locked pytest tests/test_agent_cli.py tests/test_workspace_cli.py tests/test_persistent_cli.py
+        run: BRIDGE_AGENT_CLI_PYTHON="$PWD/.venv-wheel/bin/python" uv run --locked pytest tests/test_agent_cli.py tests/test_workspace_cli.py tests/test_persistent_cli.py tests/test_coding_cli.py

@@ -58,3 +58,5 @@
 ## 阶段 4
 
 `test_persistent_sessions.py` 通过公开 Agent/SessionControl 与插件宿主验证持久恢复、隔离、兼容与资源归属；`test_persistent_cli.py` 使用独立 CLI 进程验证重启、数据库占用和 SIGKILL 后拒绝重放。状态与历史均来自 checkpoint，测试不直接查询数据库表。
+
+阶段 5 在已确认的 preview/apply、run/cancel、审批、YAML、AgentRuntime、CLI 边界逐条 TDD。命令使用实际子进程，审批 CLI 使用 PTY；仅模型与原子替换故障注入使用外部边界替身。具体证据见 docs/stages/05-edit-and-test.md。

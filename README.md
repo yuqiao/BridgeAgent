@@ -137,3 +137,5 @@ BridgeAgent/
 - Ruff 负责 lint、导入排序和格式化，mypy 使用严格模式。
 
 采用 MIT 许可证，详见 [LICENSE](LICENSE)。
+
+修改代码和运行测试见 [修改指南](docs/guides/coding.md)，默认逐次确认。
