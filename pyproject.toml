@@ -11,7 +11,12 @@ requires-python = ">=3.13"
 license = "MIT"
 license-files = ["LICENSE"]
 dependencies = [
+    "httpx>=0.28,<1",
+    "langchain>=1,<2",
+    "langchain-openai>=1,<2",
+    "langgraph>=1,<2",
     "pydantic>=2,<3",
+    "python-dotenv>=1,<2",
     "pyyaml>=6,<7",
 ]
 

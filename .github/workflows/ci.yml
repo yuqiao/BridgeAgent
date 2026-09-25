@@ -26,8 +26,8 @@ jobs:
         run: uv run --locked ruff format --check .
       - name: Check types
         run: uv run --locked mypy
-      - name: Test behavior
-        run: uv run --locked pytest
+      - name: Test behavior without external model calls
+        run: uv run --locked pytest -m "not live"
       - name: Build distributions
         run: uv build
       - name: Verify wheel installation
@@ -45,3 +45,5 @@ jobs:
             exit 1
           fi
           rm "$invalid_config"
+      - name: Verify installed Agent CLI with local model endpoint
+        run: BRIDGE_AGENT_CLI_PYTHON="$PWD/.venv-wheel/bin/python" uv run --locked pytest tests/test_agent_cli.py

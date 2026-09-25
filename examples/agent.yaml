@@ -1,0 +1,17 @@
+version: 1
+plugins:
+  - name: runtime.langchain
+    config:
+      max_model_calls: 8
+      timeout_seconds: 600
+      system_prompt: "You are a helpful assistant. Always use the add tool for integer addition. Use tool results in your answer."
+  - name: model.openai
+    config:
+      base_url_env: OPENAI_BASE_URL
+      api_key_env: OPENAI_API_KEY
+      model_env: OPENAI_MODEL
+      timeout_seconds: 600
+      max_retries: 1
+      max_tokens: 4096
+  - name: tools.arithmetic
+  - name: checkpoint.memory

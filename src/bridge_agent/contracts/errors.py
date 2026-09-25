@@ -9,6 +9,30 @@ class ConfigurationError(BridgeAgentError):
     """Configuration could not be parsed or validated."""
 
 
+class AgentInputError(BridgeAgentError):
+    """A request does not belong to a valid workspace or session."""
+
+
+class AgentLimitError(BridgeAgentError):
+    """The runtime stopped at its configured execution budget."""
+
+
+class AgentSessionError(BridgeAgentError):
+    """An interrupted session cannot be continued in this stage."""
+
+
+class AgentBusyError(BridgeAgentError):
+    """The single Agent is already executing a request."""
+
+
+class AgentTimeoutError(BridgeAgentError):
+    """A run exceeded its deadline."""
+
+
+class AgentExecutionError(BridgeAgentError):
+    """A model or tool failed; the public message excludes provider payloads."""
+
+
 class DependencyError(BridgeAgentError):
     """Plugin declarations cannot form a valid activation plan."""
 

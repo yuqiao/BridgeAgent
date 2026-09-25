@@ -2,9 +2,9 @@
 
 目标：构建一个参考 DeepSeek Harness 的可插件化 Agent。
 
-**当前阶段：阶段 1「能力接口与最小插件宿主」已完成。**
-支持 YAML 显式装配、服务依赖验证、异步激活、失败回滚与资源清理。
-Agent 循环和模型接入从阶段 2 开始；完整 Cordis 风格动态插件机制在阶段 7 实现。
+**当前阶段：阶段 1 已完成；阶段 2 Agent 闭环已实现，真实端点验收进行中。**
+支持 YAML 插件装配、LangChain 运行时、OpenAI 兼容模型、加法工具和内存多轮会话。
+真实端点当前返回限流，验收状态见 [阶段 2](docs/stages/02-agent-loop.md)。完整 Cordis 风格动态插件机制在阶段 7 实现。
 
 架构讨论、技术栈与阶段路线图见 [设计文档](docs/README.md)。
 面向编码 Agent 的仓库指南见 [AGENTS.md](AGENTS.md)。
@@ -66,6 +66,22 @@ uv run --locked python -m bridge_agent.interfaces.plugin_demo --config examples/
 uv run --locked python -m bridge_agent.interfaces.plugin_demo --config examples/plugins.reverse.yaml --text Hello
 # result: olleH!
 ```
+
+## 运行 Agent
+
+在本地 `.env` 配置 `OPENAI_BASE_URL`、`OPENAI_API_KEY`、`OPENAI_MODEL`（见 [.env.example](.env.example)），然后执行：
+
+```bash
+uv run --locked python -m bridge_agent.interfaces.agent \
+  --config examples/agent.yaml --env-file .env --env-override \
+  --workspace . --prompt "请调用 add 工具计算 1847 + 2965。" --show-tools
+```
+
+省略 `--prompt` 进入串行多轮，支持 `/new`、`/exit` 和 Ctrl+C。
+`--env-override` 使指定文件中的配置优先，避免已有进程环境覆盖项目凭据。
+当前工具只做加法，不读取工作区文件。配置、限制、Python 接口与真实验收命令见 [Agent 使用指南](docs/guides/agent.md)。
+
+默认 `pytest` 不调用真实模型；显式验收使用 `uv run --locked pytest tests/test_agent_live.py --run-live -v --tb=short`。
 
 ## 依赖管理
 

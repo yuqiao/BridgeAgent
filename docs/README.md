@@ -1,8 +1,10 @@
 # BridgeAgent 设计文档
 
-项目目标：参考 DeepSeek Harness，分阶段实现原生 Python 插件化 Agent。当前已完成工程基础与阶段 1 最小插件宿主。
+项目目标：参考 DeepSeek Harness，分阶段实现原生 Python 插件化 Agent。阶段 1 已完成，阶段 2 Agent 闭环已实现，真实端点验收进行中。
 
 实际使用与扩展插件，请先阅读 [插件使用与开发指南](guides/plugins.md)：配置运行、完整开发示例、依赖协作、资源生命周期和排错。
+
+运行模型、工具和多轮对话，请阅读 [Agent 使用指南](guides/agent.md)，验收结果见 [阶段 2](stages/02-agent-loop.md)。
 
 ## 阅读顺序
 

@@ -4,7 +4,7 @@
 
 BridgeAgent 是参考 DeepSeek Harness 架构、使用 Python 独立实现的插件化本地编码助手。
 
-当前已完成阶段 0 与阶段 1：工程基础、架构设计、静态插件宿主和无需模型的演示命令。运行时依赖为 PyYAML 与 Pydantic；Agent 循环、模型接入与聊天 CLI 从阶段 2 开始。以 [阶段路线图](docs/roadmap.md) 和实际代码判断进度，不把设计文档中的目标能力当作已有功能。
+阶段 0、1 已完成；阶段 2 已实现 LangChain Agent 闭环、OpenAI 兼容模型、加法工具、内存 checkpoint 与串行 CLI，真实端点验收尚待通过。使用见 `docs/guides/agent.md`，逐项验收见 `docs/stages/02-agent-loop.md`。以 [阶段路线图](docs/roadmap.md) 和实际代码判断进度，不把计划能力当作已有功能。
 
 ## 开始工作前
 
@@ -30,7 +30,7 @@ BridgeAgent 是参考 DeepSeek Harness 架构、使用 Python 独立实现的插
 
 ## 已确定的设计约束
 
-- Python 开发与 CI 使用 3.13，uv 管理环境和依赖。LangChain 在 Agent 闭环阶段接入，届时核实最新稳定版并锁定，不在运行时自动升级。
+- Python 开发与 CI 使用 3.13，uv 管理环境和依赖。LangChain 已在阶段 2 接入并锁定，版本见 `uv.lock`，不在运行时自动升级。
 - 默认 Agent 运行时封装 LangChain `create_agent`，通过可替换接口暴露给应用层。BridgeAgent 管理插件宿主，不再维护第二套竞争的执行循环。
 - 应用配置使用 **YAML + 显式插件清单**。YAML 仅承载数据，不执行代码或构造任意对象；密钥引用环境变量。`pyproject.toml` 仍负责 Python 工程配置。
 - 首期为可信同进程插件，启动时装配；验证缺失依赖、循环依赖和重复注册，支持激活失败回滚与退出清理。阶段 6 增加外部插件包，阶段 7 实现完整 Cordis 风格插件机制；不把动态依赖、Context 作用域和热重载提前塞入阶段 1。不可信插件隔离另行评估。
@@ -61,7 +61,8 @@ uv build
 - 测试放在 `tests/`，文件命名为 `test_*.py`，通过 `uv run --locked pytest` 运行。已配置 `importlib` 导入模式，不用手动修改 `PYTHONPATH` 掩盖安装问题。
 - CI 已启用 pytest，并验证 wheel 独立安装后的三份 YAML 示例及无效配置退出码。测试边界与 TDD 记录见 `tests/README.md`，插件开发见 `docs/guides/plugins.md`。
 - 依据改动运行相关检查。行为测试验证能力替换、生命周期、失败路径和阶段验收，不为占位接口制造测试。
-- 模型确定性测试不依赖密钥；真实端点集成验证单独执行，报告实际使用的环境与结果，不把模拟调用描述为真实 API 验证。
+- 模型确定性测试只使用替代模型或本地 HTTP 端点；真实验证需显式 `--run-live`，项目 `.env` 值优先，默认测试跳过。报告实际结果，不把模拟调用描述为真实 API 验证。不得输出凭据或将 `.env` 加入版本控制。
+- Agent Runtime 公开请求与结果位于 contracts；LangChain 模型、工具、checkpoint 服务键位于适配层，application/kernel 不导入框架类型。未完成会话要求新 session，不自动重放。
 - 打包改动验证 wheel 安装后能导入；仅文档变更检查链接、内容一致性与 `git diff --check`，无需运行模型或全套测试。
 
 ## 文档与交付

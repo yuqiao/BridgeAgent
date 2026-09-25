@@ -1,0 +1,97 @@
+"""Run a configured Agent in one workspace."""
+
+import argparse
+import asyncio
+import sys
+from pathlib import Path
+
+from bridge_agent.application.agent import AgentSession
+from bridge_agent.bootstrap.agent import agent_catalog, read_environment
+from bridge_agent.contracts.agent import AGENT_RUNTIME, RunResult
+from bridge_agent.contracts.errors import BridgeAgentError
+from bridge_agent.kernel.host import PluginHost
+
+
+def _print_result(result: RunResult, show_tools: bool) -> None:
+    if show_tools:
+        for item in result.tools:
+            print(f"{item.name}: {item.content}", file=sys.stderr)
+    print(result.text, flush=True)
+
+
+async def run(arguments: argparse.Namespace) -> int:
+    environment = read_environment(arguments.env_file, override=arguments.env_override)
+    catalog = agent_catalog(environment=environment)
+    async with PluginHost(catalog.load(arguments.config)) as host:
+        session = AgentSession(host.resolve(AGENT_RUNTIME), arguments.workspace)
+        if arguments.prompt is not None:
+            _print_result(await session.ask(arguments.prompt), arguments.show_tools)
+            return 0
+        reader = asyncio.StreamReader()
+        interactive = sys.stdin.isatty()
+        transport, _ = await asyncio.get_running_loop().connect_read_pipe(
+            lambda: asyncio.StreamReaderProtocol(reader), sys.stdin
+        )
+        status = 0
+        try:
+            while True:
+                if interactive:
+                    print("> ", end="", file=sys.stderr, flush=True)
+                line = await reader.readline()
+                if not line:
+                    break
+                text = line.decode("utf-8").strip()
+                if text == "/exit":
+                    break
+                if text == "/new":
+                    session = AgentSession(
+                        host.resolve(AGENT_RUNTIME), arguments.workspace
+                    )
+                    print("New session", file=sys.stderr)
+                elif text:
+                    try:
+                        _print_result(await session.ask(text), arguments.show_tools)
+                    except BridgeAgentError as error:
+                        print(str(error), file=sys.stderr)
+                        status = 1
+        finally:
+            transport.close()
+        return status
+
+
+def _error_lines(error: BaseException) -> list[str]:
+    if isinstance(error, BaseExceptionGroup):
+        return [line for child in error.exceptions for line in _error_lines(child)]
+    if isinstance(error, BridgeAgentError):
+        return [str(error)]
+    return ["Agent failed; inspect the chained error through the Python interface"]
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--config", type=Path, required=True)
+    parser.add_argument("--env-file", type=Path)
+    parser.add_argument(
+        "--env-override",
+        action="store_true",
+        help="Prefer explicitly supplied env-file values over process environment",
+    )
+    parser.add_argument("--workspace", type=Path, default=Path.cwd())
+    parser.add_argument(
+        "--prompt", help="Single task; omit for serial chat (/new, /exit)"
+    )
+    parser.add_argument("--show-tools", action="store_true")
+    arguments = parser.parse_args()
+    try:
+        return asyncio.run(run(arguments))
+    except KeyboardInterrupt:
+        print("Interrupted", file=sys.stderr)
+        return 130
+    except Exception as error:
+        for line in _error_lines(error):
+            print(line, file=sys.stderr)
+        return 1
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
