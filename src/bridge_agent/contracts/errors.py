@@ -55,3 +55,7 @@ class PluginCleanupError(BridgeAgentError):
 
 class WorkspaceAccessError(BridgeAgentError):
     """A workspace operation was rejected or could not be completed."""
+
+
+class SkillError(BridgeAgentError):
+    """A skill could not be discovered, validated, or loaded."""

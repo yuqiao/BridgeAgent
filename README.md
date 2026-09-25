@@ -7,7 +7,7 @@
 真实端点当前返回限流，验收状态见 [阶段 2](docs/stages/02-agent-loop.md)。完整 Cordis 风格动态插件机制在阶段 7 实现。
 
 架构讨论、技术栈与阶段路线图见 [设计文档](docs/README.md)。
-只读仓库问答见 [使用指南](docs/guides/workspace.md)，配置为 `examples/workspace.yaml`。
+只读仓库问答见 [使用指南](docs/guides/workspace.md)，配置为 `examples/workspace.yaml`。基础 Skill 已接入，见 [Skill 指南](docs/guides/skills.md) 与 `examples/skills.yaml`。
 面向编码 Agent 的仓库指南见 [AGENTS.md](AGENTS.md)。
 
 ## 开发环境

@@ -50,3 +50,7 @@
 ## 阶段 3
 
 边界已统一确认于 `docs/stages/03-07-delivery-plan.md`。`test_workspace_files.py` 经 WorkspaceFiles 验证真实文件、统一策略和限额；`test_workspace_agent.py` 经 YAML/宿主/AgentRuntime 验证装配、替换与实际工具闭环；`test_workspace_cli.py` 使用真实子进程与本地模型端点。`test_workspace_live.py` 显式启用真实模型，仅发送临时生成的代码。
+
+## 阶段 3.5
+
+`test_skills.py` 在 SkillCatalog 公开方法验证发现、加载、资料范围与错误；`test_skill_agent.py` 用实际宿主和循环验证仅选中正文进入模型上下文；`test_workspace_cli.py` 新增 Skill 参数用例验证独立 CLI 进程。

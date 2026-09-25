@@ -170,7 +170,7 @@ class LocalWorkspaceFiles:
         return FileSearch(tuple(hits), False)
 
     async def read(
-        self, path: str, *, start_line: int = 1, limit: int = 200
+        self, path: str, *, start_line: int = 1, limit: int = 200, scope: str = "."
     ) -> FileRead:
         if (
             type(start_line) is not int
@@ -179,7 +179,10 @@ class LocalWorkspaceFiles:
             or not 1 <= limit <= 200
         ):
             raise WorkspaceAccessError("Invalid read window")
-        lines = self._text(self._target(path)).splitlines()
+        target = self._target(path)
+        if not target.is_relative_to(self._target(scope)):
+            raise WorkspaceAccessError("Path is outside the requested scope")
+        lines = self._text(target).splitlines()
         stop = start_line - 1 + limit
         output: list[FileLine] = []
         remaining = 16000

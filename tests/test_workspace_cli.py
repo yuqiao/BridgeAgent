@@ -8,8 +8,13 @@ import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
+import pytest
 
-def test_cli_reads_only_the_explicit_workspace(tmp_path: Path) -> None:
+
+@pytest.mark.parametrize("with_skill", [False, True])
+def test_cli_reads_only_the_explicit_workspace(
+    tmp_path: Path, with_skill: bool
+) -> None:
     (tmp_path / "code.py").write_text("def answer():\n    return 42\n")
     config = tmp_path / "agent.yaml"
     config.write_text("""version: 1
@@ -20,6 +25,19 @@ plugins:
   - name: files.local
   - name: tools.workspace
 """)
+    if with_skill:
+        directory = tmp_path / "skills" / "code-map"
+        directory.mkdir(parents=True)
+        (directory / "SKILL.md").write_text(
+            "---\nname: code-map\ndescription: test\n---\nRead code.py and cite"
+        )
+        config.write_text(
+            config.read_text().replace(
+                "  - name: tools.workspace",
+                "  - name: skills.filesystem\n    config: {roots: [skills]}\n  - name: tools.skills",
+            )
+        )
+    observed_skills = []
 
     class Handler(BaseHTTPRequestHandler):
         def log_message(self, *args):
@@ -28,7 +46,9 @@ plugins:
         def do_POST(self):
             body = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
             last = body["messages"][-1]
-            if last["role"] == "tool":
+            if last.get("tool_call_id") == "skill-call":
+                observed_skills.append(json.loads(last["content"])["content"])
+            if last.get("tool_call_id") == "file-call":
                 message = {"role": "assistant", "content": last["content"]}
                 reason = "stop"
             else:
@@ -47,6 +67,15 @@ plugins:
                     ],
                 }
                 reason = "tool_calls"
+                if with_skill and last["role"] != "tool":
+                    message["tool_calls"][0] = {
+                        "id": "skill-call",
+                        "type": "function",
+                        "function": {
+                            "name": "load_skill",
+                            "arguments": '{"name":"code-map"}',
+                        },
+                    }
             data = json.dumps(
                 {
                     "id": "local",
@@ -96,6 +125,8 @@ plugins:
         answer = json.loads(result.stdout)
         assert answer["path"] == "code.py"
         assert answer["lines"][1] == {"number": 2, "text": "    return 42"}
+        if with_skill:
+            assert observed_skills == ["Read code.py and cite"]
     finally:
         server.shutdown()
         server.server_close()

@@ -15,7 +15,9 @@ from bridge_agent.plugins.langchain.builtin import (
     runtime_definition,
 )
 from bridge_agent.plugins.langchain.openai_model import openai_definition
+from bridge_agent.plugins.langchain.skill_tools import SKILL_TOOLS
 from bridge_agent.plugins.langchain.workspace_tools import WORKSPACE_TOOLS
+from bridge_agent.plugins.skill_plugin import SKILLS
 from bridge_agent.plugins.workspace import files_definition
 
 
@@ -34,6 +36,8 @@ def agent_catalog(
             openai_definition(values),
             files_definition(workspace),
             WORKSPACE_TOOLS,
+            SKILLS,
+            SKILL_TOOLS,
             *extra,
         )
     )

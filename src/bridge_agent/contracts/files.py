@@ -46,7 +46,7 @@ class WorkspaceFiles(Protocol):
     ) -> FileSearch: ...
 
     async def read(
-        self, path: str, *, start_line: int = 1, limit: int = 200
+        self, path: str, *, start_line: int = 1, limit: int = 200, scope: str = "."
     ) -> FileRead: ...
 
 
