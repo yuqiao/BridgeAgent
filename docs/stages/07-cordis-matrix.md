@@ -39,7 +39,9 @@
 2. 阶段 1 保持单次严格宿主不变；动态宿主另开入口，依赖缺失显示 PENDING。旧 API 1 插件可原样使用，动态扩展通过额外 Context API 提供。
 3. Python 使用类型化键、工厂、Pydantic、显式 Context/accessor，不实现 JS Proxy/装饰器运行时。同等能力通过显式 API 验证；不是 TypeScript 二进制或语法兼容。
 4. 清理沿用已确认的“尝试全部资源后汇总错误”，不复制参考实现中部分异常可能中断后续清理的行为。变更前排空在途调用；外部副作用不能通用回滚。
-5. Python 没有稳定的 Node 私有模块图 API。拟用显式源码依赖清单，核心/contracts 变化要求重启；已向用户发起这项实质映射确认，7.5 未确认前不得宣称完整对齐。
+5. Python 没有稳定的 Node 私有模块图 API。拟用显式源码依赖清单，核心/contracts 变化要求重启；用户已于 2026-09-25 确认本项，以及显式 Context/工厂/Pydantic 的 Python 映射。
 6. logging/异步 context manager/类型 Protocol 等语言原生机制替代 JS utility/symbol 工具；UI 颜色表、堆栈格式、内部私有字段不是跨语言行为承诺。
 
 7.1 review：覆盖了 core 导出、反射层、logger、volatile、loader 分组和 HMR，特别纠正“waterfall=值流水线”的误读。此阶段只记录设计证据，不为文档制造 TDD 测试。后续逐行为 red→green，再关闭矩阵行。
+
+7.2 实施证据见 [Context 与动态依赖](07.2-dynamic-context.md)，C01–C07 的基础行为已验证；注册表扩展诊断、动态更新在 7.4 收尾。
