@@ -24,7 +24,7 @@
 
 ## 源码交叉验证
 
-- 插件 effect 返回 disposer，资源按逆序清理：[Cordis fiber](https://github.com/deepseek-ai/deepseek-harness/blob/46a7f68b0922371ce7144b668b90e377d8e799f4/vendor/cordis/src/fiber.ts#L402)。依赖实现变化还会影响激活状态：[依赖刷新](https://github.com/deepseek-ai/deepseek-harness/blob/46a7f68b0922371ce7144b668b90e377d8e799f4/vendor/cordis/src/fiber.ts#L611)。BridgeAgent 首期仅采纳明确生命周期，不承诺这一整套动态依赖机制。
+- 插件 effect 返回 disposer，单个 effect 内部按逆序释放已登记资源：[Cordis fiber](https://github.com/deepseek-ai/deepseek-harness/blob/46a7f68b0922371ce7144b668b90e377d8e799f4/vendor/cordis/src/fiber.ts#L402)。依赖实现变化还会影响激活状态：[依赖刷新](https://github.com/deepseek-ai/deepseek-harness/blob/46a7f68b0922371ce7144b668b90e377d8e799f4/vendor/cordis/src/fiber.ts#L611)。注意插件整体卸载会并发启动顶层 effect 清理；单个 effect 内某项清理失败可能阻止其后续清理，因此不能把它描述为全局逆序且自动汇总错误。BridgeAgent 首期仅采纳明确生命周期，不承诺这一整套动态依赖机制。
 - 默认循环通过声明依赖并安装 Agent factory 接入系统：[agent-loop](https://github.com/deepseek-ai/deepseek-harness/blob/46a7f68b0922371ce7144b668b90e377d8e799f4/packages/core/agent-loop/src/index.ts#L330)。这支持将 Agent 接口与默认执行器分开的设计。
 - 请求构建通过 `session.deriveMessages()` 得到模型历史：[buildRequest](https://github.com/deepseek-ai/deepseek-harness/blob/46a7f68b0922371ce7144b668b90e377d8e799f4/packages/core/agent-loop/src/agent.ts#L580)。这比附带写一份运行日志更强。
 - 文件工具依赖文件能力服务，而不是直接耦合本地实现：[tool-fs](https://github.com/deepseek-ai/deepseek-harness/blob/46a7f68b0922371ce7144b668b90e377d8e799f4/packages/fs/tool-fs/src/index.ts#L18)、[read 工具](https://github.com/deepseek-ai/deepseek-harness/blob/46a7f68b0922371ce7144b668b90e377d8e799f4/packages/fs/tool-fs/src/read.ts#L146)。这是“接口、实现、使用者”分离的具体例子。

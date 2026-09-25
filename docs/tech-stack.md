@@ -7,14 +7,16 @@
 | Python | 3.13 | `.python-version` 与 CI 已使用 3.13；包元数据当前允许 `>=3.13` |
 | 项目与依赖管理 | uv | 已初始化，依赖由 `uv.lock` 锁定 |
 | Agent 框架 | 最新稳定版 LangChain | 用户已选定，尚未安装 |
-| 应用配置 | YAML + 显式插件清单 | 已确定；解析库在阶段 1 选择 |
-| 工程工具 | Ruff、mypy、pytest、Hatchling | 已配置；尚无业务测试 |
+| 应用配置 | YAML + 显式插件清单 | 已实现：PyYAML 安全解析、Pydantic v2 严格配置校验 |
+| 生命周期 | asyncio、graphlib、AsyncExitStack | 已实现：串行依赖激活、资源逆序清理、错误汇总 |
+| 工程工具 | Ruff、mypy、pytest、Hatchling | 已启用静态检查、行为测试及独立安装验收 |
 
 截至 2026-09-25，PyPI 的 LangChain 最新稳定版为 **1.4.2**，发布于 2026-09-18；其 Python 要求为 `>=3.10.0,<4.0.0`，支持 Python 3.13。来源：[PyPI 元数据](https://pypi.org/project/langchain/1.4.2/)。
 
 “最新版”用于选择接入时的稳定版本，不能作为每次启动时自动升级的要求。实际接入时重新核实最新稳定版及配套依赖，并将解析结果写入 `uv.lock`；升级通过显式依赖变更和验证完成。
 
-本轮仅确定技术栈和设计，`pyproject.toml` 的运行时依赖保持为空。
+阶段 1 运行时依赖为 `pydantic>=2,<3` 和 `pyyaml>=6,<7`，开发依赖增加 `types-pyyaml`。
+本次锁定 Pydantic 2.13.5、PyYAML 6.0.3；精确解析结果以 `uv.lock` 为准。LangChain 在阶段 2 接入。
 
 ## 框架职责
 

@@ -4,7 +4,7 @@
 
 BridgeAgent 是参考 DeepSeek Harness 架构、使用 Python 独立实现的插件化本地编码助手。
 
-当前已完成工程初始化与架构设计，尚未实现插件宿主、Agent 循环或 CLI，运行时依赖为空。以 [阶段路线图](docs/roadmap.md) 和实际代码判断进度，不把设计文档中的目标能力当作已有功能。
+当前已完成阶段 0 与阶段 1：工程基础、架构设计、静态插件宿主和无需模型的演示命令。运行时依赖为 PyYAML 与 Pydantic；Agent 循环、模型接入与聊天 CLI 从阶段 2 开始。以 [阶段路线图](docs/roadmap.md) 和实际代码判断进度，不把设计文档中的目标能力当作已有功能。
 
 ## 开始工作前
 
@@ -15,7 +15,7 @@ BridgeAgent 是参考 DeepSeek Harness 架构、使用 Python 独立实现的插
 
 ## 代码组织与依赖方向
 
-发行包名为 `bridge-agent`，导入包名为 `bridge_agent`，源码位于 `src/bridge_agent/`。当前只有最小包入口；以下模块随对应阶段创建，不预先堆叠空目录和空接口。
+发行包名为 `bridge-agent`，导入包名为 `bridge_agent`，源码位于 `src/bridge_agent/`。以下模块已有阶段 1 实现；后续仅按真实消费需求扩展接口。
 
 | 目标模块 | 职责与限制 |
 | --- | --- |
@@ -47,6 +47,7 @@ uv sync --locked
 uv run --locked ruff check .
 uv run --locked ruff format --check .
 uv run --locked mypy
+uv run --locked pytest
 uv build
 ```
 
@@ -58,7 +59,7 @@ uv build
 
 - Python 代码使用 Ruff 格式与检查规则、mypy 严格模式，具体配置以 `pyproject.toml` 为准。
 - 测试放在 `tests/`，文件命名为 `test_*.py`，通过 `uv run --locked pytest` 运行。已配置 `importlib` 导入模式，不用手动修改 `PYTHONPATH` 掩盖安装问题。
-- 当前没有测试用例，pytest 会返回退出码 5；这不是测试通过。添加首个行为测试时同步在 `.github/workflows/ci.yml` 中启用 pytest。
+- CI 已启用 pytest，并验证 wheel 独立安装后的三份 YAML 示例及无效配置退出码。测试边界与 TDD 记录见 `tests/README.md`，插件开发见 `docs/guides/plugins.md`。
 - 依据改动运行相关检查。行为测试验证能力替换、生命周期、失败路径和阶段验收，不为占位接口制造测试。
 - 模型确定性测试不依赖密钥；真实端点集成验证单独执行，报告实际使用的环境与结果，不把模拟调用描述为真实 API 验证。
 - 打包改动验证 wheel 安装后能导入；仅文档变更检查链接、内容一致性与 `git diff --check`，无需运行模型或全套测试。

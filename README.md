@@ -2,8 +2,9 @@
 
 目标：构建一个参考 DeepSeek Harness 的可插件化 Agent。
 
-**当前阶段：工程初始化与架构设计已完成。** 尚未实现 Agent 循环、模型调用、
-工具执行或插件发现机制，运行时依赖为空。后续按已确定的分层和路线图逐阶段实现。
+**当前阶段：阶段 1「能力接口与最小插件宿主」已完成。**
+支持 YAML 显式装配、服务依赖验证、异步激活、失败回滚与资源清理。
+Agent 循环和模型接入从阶段 2 开始；完整 Cordis 风格动态插件机制在阶段 7 实现。
 
 架构讨论、技术栈与阶段路线图见 [设计文档](docs/README.md)。
 面向编码 Agent 的仓库指南见 [AGENTS.md](AGENTS.md)。
@@ -33,6 +34,7 @@ uv sync --locked
 uv run --locked ruff check .
 uv run --locked ruff format --check .
 uv run --locked mypy
+uv run --locked pytest
 
 # 自动格式化
 uv run ruff format .
@@ -41,9 +43,29 @@ uv run ruff format .
 uv build
 ```
 
-pytest 已配置，测试放在 `tests/`，添加测试后使用 `uv run pytest`。
-目前没有测试用例，pytest 会返回退出码 5；CI 暂时验证静态检查、构建和 wheel 安装导入。
-添加首个功能测试时应同步在 CI 中启用 pytest。
+CI 执行静态检查、行为测试、构建，以及独立 wheel 环境中的示例运行。
+测试边界与开发方式见 [tests/README.md](tests/README.md)。
+
+## 运行插件示例
+
+无需模型和密钥，在仓库根目录执行：
+
+```bash
+uv run --locked python -m bridge_agent.interfaces.plugin_demo --config examples/plugins.upper.yaml --text Hello
+# result: HELLO
+uv run --locked python -m bridge_agent.interfaces.plugin_demo --config examples/plugins.lower.yaml --text Hello
+# result: hello
+```
+
+两份 YAML 为相同消费者选择不同服务实现；消费者位于配置列表前面，宿主仍按依赖启动。
+失败会返回非零退出码。接口、生命周期和验收证据见 [阶段 1](docs/stages/01-plugin-host.md)。
+
+开发自己的插件请看 [插件使用与开发指南](docs/guides/plugins.md)，其中的反转文本示例已可运行：
+
+```bash
+uv run --locked python -m bridge_agent.interfaces.plugin_demo --config examples/plugins.reverse.yaml --text Hello
+# result: olleH!
+```
 
 ## 依赖管理
 
@@ -61,17 +83,24 @@ uv lock --upgrade           # 主动升级锁定依赖，需检查变更并重�
 
 ```text
 BridgeAgent/
-├── .github/workflows/ci.yml  # 静态检查、构建、安装验证
+├── .github/workflows/ci.yml  # 静态检查、行为测试、构建、安装验证
 ├── .editorconfig            # 编辑器基础格式约定
 ├── .python-version          # 开发 Python 版本
 ├── AGENTS.md                # 编码 Agent 的仓库指南
 ├── docs/                    # 架构、路线图、术语与决策
+├── examples/                # 可直接运行的 YAML 装配示例
 ├── pyproject.toml           # 包元数据、依赖和工具配置
 ├── uv.lock                  # uv 生成的依赖锁文件
 ├── src/bridge_agent/
 │   ├── __init__.py          # 最小包入口
+│   ├── contracts/           # 插件协议与能力定义
+│   ├── kernel/              # 依赖计划、宿主与资源所有权
+│   ├── bootstrap/           # YAML 校验与显式插件清单
+│   ├── plugins/             # 能力实现与消费者插件
+│   ├── application/         # 只依赖能力接口的应用用例
+│   ├── interfaces/          # 插件演示命令
 │   └── py.typed             # 类型信息标记
-├── tests/                   # 后续测试
+├── tests/                   # 配置、宿主、类型与命令验收
 ├── LICENSE
 └── README.md
 ```

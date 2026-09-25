@@ -26,12 +26,22 @@ jobs:
         run: uv run --locked ruff format --check .
       - name: Check types
         run: uv run --locked mypy
-      # Add `uv run --locked pytest` when the first feature tests are introduced.
+      - name: Test behavior
+        run: uv run --locked pytest
       - name: Build distributions
         run: uv build
       - name: Verify wheel installation
         shell: bash
         run: |
           uv venv .venv-wheel
-          uv pip install --python .venv-wheel/bin/python --no-deps dist/*.whl
+          uv pip install --python .venv-wheel/bin/python dist/*.whl
           .venv-wheel/bin/python -I -c "import bridge_agent; from importlib.metadata import version; print(version('bridge-agent'))"
+          test "$(.venv-wheel/bin/python -I -m bridge_agent.interfaces.plugin_demo --config examples/plugins.upper.yaml --text Hello)" = 'result: HELLO'
+          test "$(.venv-wheel/bin/python -I -m bridge_agent.interfaces.plugin_demo --config examples/plugins.lower.yaml --text Hello)" = 'result: hello'
+          test "$(.venv-wheel/bin/python -I -m bridge_agent.interfaces.plugin_demo --config examples/plugins.reverse.yaml --text Hello)" = 'result: olleH!'
+          invalid_config=$(mktemp)
+          printf 'version: 1\nplugins: [{name: unknown}]\n' > "$invalid_config"
+          if .venv-wheel/bin/python -I -m bridge_agent.interfaces.plugin_demo --config "$invalid_config" --text Hello; then
+            exit 1
+          fi
+          rm "$invalid_config"

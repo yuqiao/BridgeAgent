@@ -1,0 +1,7 @@
+version: 1
+plugins:
+  - name: demo.report
+    config:
+      prefix: "result: "
+  - name: demo.uppercase
+    config: {}
