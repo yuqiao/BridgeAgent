@@ -1,0 +1,11 @@
+version: 2
+entries:
+  - id: default
+    name: runtime.example
+    config: {prefix: 'external: '}
+  - id: isolated
+    scope: {agent.runtime: second}
+  - id: second
+    parent: isolated
+    name: runtime.example
+    config: {prefix: 'second: '}

@@ -175,3 +175,20 @@ def test_cancelled_activation_propagates_cancellation_after_cleanup():
             assert host.status("slow").state == "failed"
 
     asyncio.run(scenario())
+
+
+def test_service_can_supply_its_own_intercept_merge_policy():
+    async def scenario():
+        async with DynamicHost() as host:
+            parent = host.context.intercept(VALUE, {"nested": {"a": 1}})
+            child = parent.intercept(VALUE, {"nested": {"b": 2}})
+
+            def merge(configs):
+                nested = {}
+                for config in configs:
+                    nested.update(config.get("nested", {}))
+                return {"nested": nested}
+
+            assert child.config_for(VALUE, merge=merge) == {"nested": {"a": 1, "b": 2}}
+
+    asyncio.run(scenario())

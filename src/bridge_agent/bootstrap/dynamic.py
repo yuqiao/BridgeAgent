@@ -183,7 +183,12 @@ class DynamicLoader:
                 ),
             )
             contexts[entry.id] = context
-            definitions[entry.id].prepare(entry.config)
+            checked = (
+                definition.validate_config(entry.config)
+                if definition.validate_config
+                else entry.config
+            )
+            definitions[entry.id].prepare(checked)
         enabled: set[str] = set()
         remount: set[str] = set()
         for entry in ordered.values():

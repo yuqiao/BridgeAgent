@@ -210,3 +210,36 @@ def test_vetoed_update_does_not_save_unapplied_configuration(tmp_path):
             assert loader.resolve("target").config == {}
 
     asyncio.run(scenario())
+
+
+def test_loader_preflight_uses_normalized_plugin_configuration(tmp_path):
+    from bridge_agent.bootstrap.config import PluginCatalog
+    from bridge_agent.contracts.plugins import PluginDefinition, ServiceKey
+
+    key = ServiceKey[str]("normalized")
+
+    def prepare(config):
+        value = config["value"]
+
+        class Provider:
+            async def activate(self, context):
+                context.provide(key, value)
+
+        return Provider
+
+    definition = PluginDefinition(
+        "normalized",
+        prepare,
+        provides=(key,),
+        validate_config=lambda config: {"value": config.get("value", "default")},
+    )
+    path = tmp_path / "tree.yaml"
+    path.write_text("version: 2\nentries: [{id: provider, name: normalized}]\n")
+
+    async def scenario():
+        async with DynamicHost() as host:
+            loader = DynamicLoader(host, PluginCatalog((definition,)))
+            await loader.load(path)
+            assert host.context.require(key) == "default"
+
+    asyncio.run(scenario())

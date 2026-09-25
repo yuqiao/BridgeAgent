@@ -11,9 +11,10 @@ from pathlib import Path
 import pytest
 
 
+@pytest.mark.parametrize("dynamic", [False, True])
 @pytest.mark.parametrize("with_skill", [False, True])
 def test_cli_reads_only_the_explicit_workspace(
-    tmp_path: Path, with_skill: bool
+    tmp_path: Path, with_skill: bool, dynamic: bool
 ) -> None:
     (tmp_path / "code.py").write_text("def answer():\n    return 42\n")
     config = tmp_path / "agent.yaml"
@@ -35,6 +36,21 @@ plugins:
             config.read_text().replace(
                 "  - name: tools.workspace",
                 "  - name: skills.filesystem\n    config: {roots: [skills]}\n  - name: tools.skills",
+            )
+        )
+    if dynamic:
+        import yaml
+
+        document = yaml.safe_load(config.read_text())
+        config.write_text(
+            json.dumps(
+                {
+                    "version": 2,
+                    "entries": [
+                        {"id": f"plugin-{index}", **row}
+                        for index, row in enumerate(document["plugins"])
+                    ],
+                }
             )
         )
     observed_skills = []
@@ -109,6 +125,7 @@ plugins:
                 "-I",
                 "-m",
                 "bridge_agent.interfaces.agent",
+                *(["--dynamic"] if dynamic else []),
                 "--config",
                 str(config),
                 "--workspace",

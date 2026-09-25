@@ -3,15 +3,18 @@
 import asyncio
 import hashlib
 import importlib
+import importlib.metadata
 import logging
 import sys
 import types
-from dataclasses import dataclass
+from collections.abc import Callable
+from dataclasses import dataclass, replace
 from pathlib import Path
 
 from bridge_agent.bootstrap.dynamic import DynamicLoader
 from bridge_agent.contracts.errors import ConfigurationError, RestartRequired
 from bridge_agent.contracts.packages import PluginExport
+from bridge_agent.contracts.plugins import ServiceIdentity
 from bridge_agent.kernel.dynamic import DynamicHost
 
 
@@ -26,15 +29,18 @@ class Source:
     module: str
     attribute: str
     modules: tuple[str, ...]
+    extra_requires: tuple[ServiceIdentity, ...] = ()
 
 
 class SourceReloader:
     def __init__(self, host: DynamicHost) -> None:
         self.host = host
         self._sources: dict[str, Source] = {}
+        self._files: dict[Path, bytes] = {}
         self._configs: dict[Path, tuple[bytes, DynamicLoader]] = {}
         self._modules: dict[str, ModuleSource] = {}
         self._restart: set[str] = set()
+        self._installed_ids: set[str] = set()
         for name, module in tuple(sys.modules.items()):
             if (
                 name.startswith("bridge_agent.")
@@ -43,13 +49,41 @@ class SourceReloader:
             ):
                 self.require_restart(name)
 
+    def register_installed(self) -> None:
+        entries = tuple(importlib.metadata.entry_points(group="bridge_agent.plugins"))
+        active: set[str] = set()
+        for status in self.host.instances:
+            if status.state == "disposed":
+                continue
+            candidates = [entry for entry in entries if entry.name == status.plugin]
+            if not candidates:
+                continue
+            if len(candidates) != 1:
+                raise ConfigurationError("Ambiguous reload entry point")
+            entry = candidates[0]
+            export = entry.load()
+            if not isinstance(export, PluginExport):
+                raise ConfigurationError("Invalid reload export")
+            self.register(
+                status.instance_id,
+                entry.module,
+                entry.attr or "plugin",
+                dependencies=export.reload_modules,
+            )
+            for module in export.restart_modules:
+                self.require_restart(module)
+            active.add(status.instance_id)
+        for ident in self._installed_ids - active:
+            self._sources.pop(ident, None)
+        self._installed_ids = active
+
     def require_restart(self, name: str) -> None:
         module = importlib.import_module(name)
         if module.__file__ is None:
             raise ConfigurationError("Restart watch requires a source file")
         path = Path(module.__file__).resolve()
-        self._modules[name] = ModuleSource(
-            path, hashlib.sha256(path.read_bytes()).digest()
+        self._modules.setdefault(
+            name, ModuleSource(path, hashlib.sha256(path.read_bytes()).digest())
         )
         self._restart.add(name)
 
@@ -72,18 +106,38 @@ class SourceReloader:
             self._modules.setdefault(
                 name, ModuleSource(path, hashlib.sha256(path.read_bytes()).digest())
             )
-        self._sources[instance_id] = Source(module, attribute, modules)
+        export = getattr(importlib.import_module(module), attribute)
+        if not isinstance(export, PluginExport):
+            raise ConfigurationError("Invalid source export")
+        extra = tuple(
+            key
+            for key in self.host.definition(instance_id).requires
+            if key not in export.definition.requires
+        )
+        self._sources[instance_id] = Source(module, attribute, modules, extra)
+
+    def watch_file(self, path: Path) -> None:
+        path = path.resolve()
+        self._files[path] = hashlib.sha256(path.read_bytes()).digest()
 
     def watch_config(self, path: Path, loader: DynamicLoader) -> None:
         path = path.resolve()
         self._configs[path] = (hashlib.sha256(path.read_bytes()).digest(), loader)
 
-    async def watch(self, stop: asyncio.Event, *, interval: float = 0.25) -> None:
+    async def watch(
+        self,
+        stop: asyncio.Event,
+        *,
+        interval: float = 0.25,
+        on_reload: Callable[[tuple[str, ...]], None] | None = None,
+    ) -> None:
         if interval <= 0:
             raise ValueError("Watch interval must be positive")
         while not stop.is_set():
             try:
-                await self.check()
+                changed = await self.check()
+                if changed and on_reload:
+                    on_reload(changed)
             except RestartRequired:
                 raise
             except Exception:
@@ -97,12 +151,25 @@ class SourceReloader:
 
     async def check(self) -> tuple[str, ...]:
         async with self.host.transaction():
+            file_changes: list[str] = []
+            for path, previous in tuple(self._files.items()):
+                digest = (
+                    hashlib.sha256(path.read_bytes()).digest()
+                    if path.exists()
+                    else b"missing"
+                )
+                if digest != previous:
+                    file_changes.append(str(path))
+                    self._files[path] = digest
+            if file_changes:
+                self.host._notify("hmr.change", tuple(file_changes))
             config_changes: list[str] = []
             for path, (previous, loader) in tuple(self._configs.items()):
                 digest = hashlib.sha256(path.read_bytes()).digest()
                 if digest != previous:
                     self._configs[path] = (digest, loader)
                     await loader.load(path)
+                    self.register_installed()
                     config_changes.append(str(path))
             data = {
                 name: module.path.read_bytes() for name, module in self._modules.items()
@@ -165,7 +232,15 @@ class SourceReloader:
                         raise ConfigurationError(
                             "Reloaded plugin export is incompatible"
                         )
-                    if not await self.host.reload(ident, export.definition):
+                    definition = replace(
+                        export.definition,
+                        requires=tuple(
+                            dict.fromkeys(
+                                (*export.definition.requires, *source.extra_requires)
+                            )
+                        ),
+                    )
+                    if not await self.host.reload(ident, definition):
                         raise ConfigurationError("Source update was vetoed")
                     replaced.append(ident)
             except BaseException as error:

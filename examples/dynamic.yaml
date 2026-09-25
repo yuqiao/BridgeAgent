@@ -1,0 +1,33 @@
+version: 2
+entries:
+  - id: agent
+    name: runtime.langchain
+    config:
+      timeout_seconds: 600
+      max_model_calls: 20
+      system_prompt: >-
+        You are a local coding assistant. Discover relevant skills when useful.
+        Read files before answering and cite paths and line numbers.
+        Preview changes before applying them. Apply changes and run named commands
+        only through the provided tools, respecting approval decisions.
+  - id: model
+    name: model.openai
+    config: {timeout_seconds: 600}
+  - id: checkpoint
+    name: checkpoint.sqlite
+    config: {path: .bridge-agent/dynamic.sqlite}
+  - id: approval
+    name: approval.policy
+  - id: files
+    name: files.editable
+  - id: commands
+    name: commands.local
+    config:
+      commands:
+        test: [uv, run, --locked, pytest]
+      timeout_seconds: 600
+  - id: skills
+    name: skills.filesystem
+    config: {roots: [examples/skills]}
+  - id: tools
+    name: tools.coding-skills

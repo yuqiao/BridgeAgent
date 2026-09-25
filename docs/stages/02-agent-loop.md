@@ -97,3 +97,8 @@ CLI 一次绑定一个已有工作区目录、一个 Agent，同一会话串行�
 - [模型调用限制](https://github.com/langchain-ai/docs/blob/main/src/oss/langchain/middleware/built-in.mdx)：由运行时适配层设置有界执行。
 
 2026-09-25 从 PyPI 核实稳定版：LangChain 1.4.2、langchain-openai 1.6.6、LangGraph 1.2.12、python-dotenv 1.2.3。实际安装结果以 uv.lock 为准。
+
+
+### 阶段 7.5 复验（2026-09-25）
+
+原 .env、600 秒超时复验：仓库工具测试已成功，但 B11 仍返回 `AgentExecutionError <- OpenAIRateLimitError <- RateLimitError`；根据端点恢复迹象再单独重试一次，2.73 秒后仍失败。B11 不关闭。真实文件工具成功说明已有一次真实工具闭环证据，但不能替代本项规定的加法结果与同会话追问断言。

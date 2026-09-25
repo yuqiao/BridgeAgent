@@ -1,6 +1,6 @@
 # 外部插件包与配置组合
 
-独立示例在 `examples/external-plugin`。开发环境通过 uv 的本地开发依赖构建安装该包；它不是核心 wheel 的组成部分，也不是生产依赖。
+独立示例在 `examples/external-plugin`。开发环境通过 uv 的本地 editable 开发依赖安装该包；它不是核心 wheel 的组成部分，也不是生产依赖。
 
 ```bash
 uv build examples/external-plugin --out-dir dist-examples
@@ -24,3 +24,5 @@ plugins:
 ```
 
 按 include 顺序深度优先，再追加当前文件 plugins；每个文档声明 version: 1，plugins 可省略。最多读取 32 个文档，循环拒绝；路径相对包含者目录，不能绝对、含 `..` 或经符号链接越出该目录。相同插件出现两次直接报错，不做静默覆盖、深合并或任意表达式求值。插件配置中的业务路径（如 SQLite 路径）保持原有语义，不自动相对 include 文件重写。需要另一实现时选择不同组合文件。所有配置准备完成后才启动宿主。
+
+动态多实例和源码重载见 [动态插件指南](dynamic-plugins.md)。PluginExport 可选声明 reload_modules 与 restart_modules；现有 API 1 导出不需修改即可静态或动态加载。

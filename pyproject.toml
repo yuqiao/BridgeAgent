@@ -39,7 +39,7 @@ url = "https://pypi.org/simple"
 default = true
 
 [tool.uv.sources]
-bridge-agent-example = { path = "examples/external-plugin" }
+bridge-agent-example = { path = "examples/external-plugin", editable = true }
 
 [tool.ruff]
 target-version = "py313"

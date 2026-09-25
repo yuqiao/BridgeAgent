@@ -4,7 +4,7 @@
 
 核对本地参考提交 `46a7f68b0922371ce7144b668b90e377d8e799f4`，范围为 vendor/cordis/src/index.ts 的公开导出及 Context 混入方法、vendor/loader 和 vendor/hmr；不把 Harness 产品插件算进框架完整性。
 
-源码链接基址：[固定参考提交](https://github.com/deepseek-ai/deepseek-harness/tree/46a7f68b0922371ce7144b668b90e377d8e799f4/vendor)。下面路径相对 vendor。此表在 7.1 是待实现清单，不表示实现完成；7.5 必须回填每行证据。
+源码链接基址：[固定参考提交](https://github.com/deepseek-ai/deepseek-harness/tree/46a7f68b0922371ce7144b668b90e377d8e799f4/vendor)。下面路径相对 vendor。此表在 7.1 建立，7.5 已逐项 review 并在下方关闭验收项；路径和命名差异按已确认的 Python 映射处理。
 
 | ID | 参考公开能力与源码依据 | Python 映射与验收节点 |
 | --- | --- | --- |
@@ -39,7 +39,7 @@
 2. 阶段 1 保持单次严格宿主不变；动态宿主另开入口，依赖缺失显示 PENDING。旧 API 1 插件可原样使用，动态扩展通过额外 Context API 提供。
 3. Python 使用类型化键、工厂、Pydantic、显式 Context/accessor，不实现 JS Proxy/装饰器运行时。同等能力通过显式 API 验证；不是 TypeScript 二进制或语法兼容。
 4. 清理沿用已确认的“尝试全部资源后汇总错误”，不复制参考实现中部分异常可能中断后续清理的行为。变更前排空在途调用；外部副作用不能通用回滚。
-5. Python 没有稳定的 Node 私有模块图 API。拟用显式源码依赖清单，核心/contracts 变化要求重启；用户已于 2026-09-25 确认本项，以及显式 Context/工厂/Pydantic 的 Python 映射。
+5. Python 没有稳定的 Node 私有模块图 API。使用显式源码依赖清单，核心/contracts 变化要求重启；用户已于 2026-09-25 确认本项，以及显式 Context/工厂/Pydantic 的 Python 映射。
 6. logging/异步 context manager/类型 Protocol 等语言原生机制替代 JS utility/symbol 工具；UI 颜色表、堆栈格式、内部私有字段不是跨语言行为承诺。
 
 7.1 review：覆盖了 core 导出、反射层、logger、volatile、loader 分组和 HMR，特别纠正“waterfall=值流水线”的误读。此阶段只记录设计证据，不为文档制造 TDD 测试。后续逐行为 red→green，再关闭矩阵行。
@@ -49,3 +49,37 @@
 7.3 证据见 [事件与贡献](07.3-events-effects.md)：C09–C13、C15 与实际 Agent around 已验证，C14 生命周期/配置事件待 7.4。
 
 7.4 证据见 [动态生命周期与重载](07.4-reload.md)。已实现配置树、更新/撤销、可用性、volatile、配置/服务拦截、显式源码清单与 watcher；最终应用入口和完整性 review 在 7.5。
+
+
+## 7.5 最终验收证据
+
+下表测试文件均位于仓库 tests/，通过公开边界执行。源码符号仅用于定位实现，未用内部状态替代行为验收。
+
+| ID | 已交付的实现与证据 | 结论 |
+| --- | --- | --- |
+| C01 | Context.extend/root/metadata；test_dynamic_host 的 metadata/intercepts 测试；Context.is 使用 Python isinstance 表达 | Python 映射通过 |
+| C02 | Context.isolate；test_dynamic_host 独立/共享 label；test_dynamic_agent 两套真实 LangChain runtime | 通过 |
+| C03 | config_for 默认/自定义 merge；test_dynamic_host 两项继承合并测试 | 通过 |
+| C04 | PluginDefinition + mount + requires，统一工厂返回 Plugin；test_dynamic_host 等待依赖与激活失败 | Python 工厂映射通过 |
+| C05 | instances/status/definition/unmount，以实例 ID 表示身份；test_dynamic_reload registry snapshot + test_dynamic_loader create/remove | 通过；Python 快照替代 JS Map 方法 |
+| C06 | 六种状态、await mount/reload/reconfigure、失败与取消；test_dynamic_reload 配置替换/失败恢复/关闭保护 | 通过 |
+| C07 | 服务消失先停消费者，重新出现自动激活；test_dynamic_host removal/rearrival + test_dynamic_reload consumer rollback | 通过 |
+| C08 | require/provide/check、set_service/refresh；test_dynamic_reload availability；test_dynamic_events get/set 拦截 | 通过 |
+| C09 | accessor/alias、普通 callable/工厂/显式 Context 参数；test_dynamic_events accessor_and_alias；协议可提供任意类型服务 | 已确认 Python 映射通过 |
+| C10 | effect + 所属 context managers + 状态 effect 标签；test_dynamic_events 手动撤销、释放/创建排空；test_dynamic_agent 实际文件全部关闭 | 通过 |
+| C11 | on/once/prepend/global_/select；test_dynamic_events once/filter、旧 disposer、listener interception | 通过 |
+| C12 | 同步 emit/bail、异步 parallel/serial；test_dynamic_events 短路值与汇总错误 | 通过；同步入口拒绝异步监听器，避免遗漏 await |
+| C13 | waterfall next 链；test_dynamic_events wrap/veto；test_dynamic_agent 实际 Agent around | 通过 |
+| C14 | internal 生命周期/配置/更新/get/set/listener/dispatch；test_dynamic_events 与 test_dynamic_reload 中对应公开事件用例 | 通过 |
+| C15 | logging logger/levels/Handler/Formatter；test_dynamic_events named_logging_exporter 随卸载撤销 | Python logging 映射通过 |
+| L01 | DynamicLoader entry 树、create/update/remove/resolve/context/locate；test_dynamic_loader 移动/禁用/恢复/回滚 | 通过；await 异步 API + host 状态代替独立 await 方法 |
+| L02 | 父 Context 继承 + 显式服务标签；test_dynamic_loader scopes + test_dynamic_cli --entry | 通过 |
+| L03 | entry point PluginExport + inject + prepare/validate_config；test_external_plugins；test_dynamic_loader injection/normalized config | 通过 |
+| L04 | ConfigView、volatile_fields、验证后更新、显式 reload 强制重启；test_dynamic_reload volatile 与 reload | 通过 |
+| L05 | loader.save 原子写入、临时操作不写盘；test_dynamic_loader create/move/remove/save | 通过 |
+| H01 | SourceReloader 内容 hash + manifest 依赖顺序 + 受影响实例；test_source_reload 真实文件/依赖/父包引用/自动清单 | 已确认显式清单映射通过 |
+| H02 | watch_config、watch_file、hmr.change/reload、RestartRequired；test_source_reload + test_dynamic_cli 等待输入时更新 | 通过 |
+| H03 | 模块/定义/配置树回滚、租约排空与超时；test_source_reload 语法失败、test_dynamic_reload 消费者失败、test_dynamic_events 并发释放 | 通过；外部 I/O 不承诺回滚 |
+| P01 | test_dynamic_agent 真实 LangChain 循环、两作用域、连续十次模型替换/扩展 reload、监听器单次触发、实际文件资源释放；动态 workspace/coding CLI 回归 | 本地通过，真实供应商验收单独保留 |
+
+完整性结论：参考基线公开能力已逐项实现或落实已确认的 Python 映射，未以“能热重载”替代完整性判断。此次没有将参考 Harness 的产品工具、UI、MCP 等未编号后续工作算入 Cordis 框架范围。静态 API 1 保持兼容，动态迁移见 [指南](../guides/dynamic-plugins.md)。最终数量、review 与验证范围见 [7.5](07.5-integration.md)。

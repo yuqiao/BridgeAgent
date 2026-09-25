@@ -116,6 +116,8 @@ def test_shared_contract_change_requires_restart(tmp_path, monkeypatch):
             reloader = SourceReloader(host)
             reloader.require_restart(module.__name__)
             file.write_text("version = 2\n")
+            # A configuration refresh re-registers installed manifests.
+            reloader.require_restart(module.__name__)
             with pytest.raises(RestartRequired):
                 await reloader.check()
 
@@ -196,5 +198,110 @@ def test_reload_updates_parent_package_module_attributes(tmp_path, monkeypatch):
                 RunRequest("id", "hello", tmp_path)
             )
             assert result.text == "two"
+
+    asyncio.run(scenario())
+
+
+def test_installed_entry_point_manifest_is_registered_for_reload(tmp_path, monkeypatch):
+    import importlib.metadata
+    from importlib.metadata import EntryPoint
+
+    file = tmp_path / "plugin.py"
+    file.write_text(source("one"))
+    module = types.ModuleType("bridge_hmr_installed")
+    module.__file__ = str(file)
+    module.__package__ = ""
+    monkeypatch.setitem(sys.modules, module.__name__, module)
+    exec(compile(file.read_text(), str(file), "exec"), module.__dict__)
+    monkeypatch.setattr(
+        importlib.metadata,
+        "entry_points",
+        lambda **kwargs: (
+            EntryPoint(
+                name="runtime.source",
+                value="bridge_hmr_installed:plugin",
+                group="bridge_agent.plugins",
+            ),
+        ),
+    )
+
+    async def scenario():
+        async with DynamicHost() as host:
+            await host.mount("runtime", module.plugin.definition)
+            reloader = SourceReloader(host)
+            reloader.register_installed()
+            file.write_text(source("two"))
+            assert await reloader.check() == ("runtime",)
+            assert (
+                await host.context.require(AGENT_RUNTIME).run(
+                    RunRequest("id", "hello", tmp_path)
+                )
+            ).text == "two"
+
+    asyncio.run(scenario())
+
+
+def test_non_module_file_changes_emit_change_without_reloading_plugins(tmp_path):
+    from bridge_agent.contracts.plugins import PluginDefinition
+
+    file = tmp_path / "notes.txt"
+    file.write_text("old")
+    seen = []
+
+    class Observer:
+        async def activate(self, context):
+            context.on("hmr.change", lambda paths: seen.extend(paths))
+
+    async def scenario():
+        async with DynamicHost() as host:
+            await host.mount(
+                "observer", PluginDefinition("observer", lambda config: Observer)
+            )
+            reloader = SourceReloader(host)
+            reloader.watch_file(file)
+            file.write_text("new")
+            assert await reloader.check() == ()
+            assert seen == [str(file.resolve())]
+            assert host.status("observer").state == "active"
+
+    asyncio.run(scenario())
+
+
+def test_source_reload_preserves_additional_loader_dependencies(tmp_path, monkeypatch):
+    from dataclasses import replace
+
+    from bridge_agent.contracts.plugins import PluginDefinition, ServiceKey
+
+    required = ServiceKey[str]("extra.dependency")
+
+    class Provider:
+        async def activate(self, context):
+            context.provide(required, "available")
+
+    file = tmp_path / "plugin.py"
+    file.write_text(source("one"))
+    module = types.ModuleType("bridge_hmr_injected")
+    module.__file__ = str(file)
+    module.__package__ = ""
+    monkeypatch.setitem(sys.modules, module.__name__, module)
+    exec(compile(file.read_text(), str(file), "exec"), module.__dict__)
+
+    async def scenario():
+        async with DynamicHost() as host:
+            await host.mount(
+                "dependency",
+                PluginDefinition(
+                    "dependency", lambda config: Provider, provides=(required,)
+                ),
+            )
+            await host.mount(
+                "runtime", replace(module.plugin.definition, requires=(required,))
+            )
+            reloader = SourceReloader(host)
+            reloader.register("runtime", module.__name__, "plugin")
+            file.write_text(source("two"))
+            await reloader.check()
+            await host.unmount("dependency")
+            assert host.status("runtime").state == "pending"
 
     asyncio.run(scenario())

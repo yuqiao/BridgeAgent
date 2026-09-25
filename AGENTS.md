@@ -4,11 +4,11 @@
 
 BridgeAgent 是参考 DeepSeek Harness 架构、使用 Python 独立实现的插件化本地编码助手。
 
-阶段 0、1、3.5、4、5、6 已完成本地验收；阶段 2 已实现 LangChain Agent 闭环、OpenAI 兼容模型、加法工具、内存 checkpoint 与串行 CLI，真实端点验收尚待通过。使用见 `docs/guides/agent.md`，逐项验收见 `docs/stages/02-agent-loop.md`。以 [阶段路线图](docs/roadmap.md) 和实际代码判断进度，不把计划能力当作已有功能。
+阶段 0–7 的代码与本地验收已完成（含 3.5、7.1–7.5）；阶段 2 已实现 LangChain Agent 闭环、OpenAI 兼容模型、加法工具、内存 checkpoint 与串行 CLI，真实端点验收尚待通过。使用见 `docs/guides/agent.md`，逐项验收见 `docs/stages/02-agent-loop.md`。以 [阶段路线图](docs/roadmap.md) 和实际代码判断进度，不把计划能力当作已有功能。
 
 ## 开始工作前
 
-阶段 4 已支持 SQLite checkpoint 与跨进程会话恢复，见 `docs/guides/sessions.md`；只允许续接已完成且兼容的会话。阶段 3.5 基础 Skill 已实现，见 `docs/guides/skills.md` 与 `examples/skills.yaml`。阶段 3 只读文件能力与工具已实现，使用 `examples/workspace.yaml`，见 `docs/guides/workspace.md`；真实端点仍返回限流。阶段 3–7 的测试边界与行为约定已全部确认，见 `docs/stages/03-07-delivery-plan.md`。用户已授权逐阶段 TDD、review、提交、push 和 tag，无需重复询问例行发布。
+阶段 4 已支持 SQLite checkpoint 与跨进程会话恢复，见 `docs/guides/sessions.md`；只允许续接已完成且兼容的会话。阶段 3.5 基础 Skill 已实现，见 `docs/guides/skills.md` 与 `examples/skills.yaml`。阶段 3 只读文件能力与工具已实现，使用 `examples/workspace.yaml`，见 `docs/guides/workspace.md`；阶段 3 C10 真实读取验收已通过，阶段 2 B11 仍限流。阶段 3–7 的测试边界与行为约定已全部确认，见 `docs/stages/03-07-delivery-plan.md`。用户已授权逐阶段 TDD、review、提交、push 和 tag，无需重复询问例行发布。
 
 - 先查看 `git status --short`，保留已有修改。
 - 阅读 [目标架构](docs/architecture.md)、[阶段路线图](docs/roadmap.md) 和 [领域术语](docs/CONTEXT.md)。技术选择见 [技术栈](docs/tech-stack.md)，决策理由见 [文档索引](docs/README.md) 中的 ADR。
@@ -35,7 +35,7 @@ BridgeAgent 是参考 DeepSeek Harness 架构、使用 Python 独立实现的插
 - Python 开发与 CI 使用 3.13，uv 管理环境和依赖。LangChain 已在阶段 2 接入并锁定，版本见 `uv.lock`，不在运行时自动升级。
 - 默认 Agent 运行时封装 LangChain `create_agent`，通过可替换接口暴露给应用层。BridgeAgent 管理插件宿主，不再维护第二套竞争的执行循环。
 - 应用配置使用 **YAML + 显式插件清单**。YAML 仅承载数据，不执行代码或构造任意对象；密钥引用环境变量。`pyproject.toml` 仍负责 Python 工程配置。
-- 首期为可信同进程插件，启动时装配；验证缺失依赖、循环依赖和重复注册，支持激活失败回滚与退出清理。阶段 6 增加外部插件包，阶段 7 实现完整 Cordis 风格插件机制；不把动态依赖、Context 作用域和热重载提前塞入阶段 1。不可信插件隔离另行评估。
+- 首期为可信同进程插件，启动时装配；验证缺失依赖、循环依赖和重复注册，支持激活失败回滚与退出清理。阶段 6 增加外部插件包，阶段 7 实现完整 Cordis 风格插件机制；不把动态依赖、Context 作用域和热重载提前塞入阶段 1。不可信插件隔离另行评估。动态模式使用 YAML v2 + DynamicHost，静态 v1 保持兼容；扩展约定见 `docs/guides/dynamic-plugins.md`。
 - 首期为单工作区、单 Agent、串行多轮 CLI。先实现只读仓库问答，再增加修改与测试；工作区读取约束以目标架构为准。
 - 默认运行时以 checkpoint 管理恢复状态，执行日志用于观察与排障。应用层不维护第二份权威消息历史，不承诺从日志重建所有模型请求。
 - 模型适配以 OpenAI Chat Completions 兼容服务为起点，验证工具调用与工具结果回传形成闭环；其他能力单独验证。

@@ -348,3 +348,94 @@ def test_listener_registration_can_be_replaced_with_owned_disposer():
             assert calls == ["intercepted", "disposed"]
 
     asyncio.run(scenario())
+
+
+def test_async_event_dispatch_holds_its_listeners_alive_until_completion():
+    import pytest
+
+    from bridge_agent.contracts.errors import HostStateError
+
+    started = asyncio.Event()
+    finish = asyncio.Event()
+
+    class Plugin:
+        async def activate(self, context):
+            async def listener():
+                started.set()
+                await finish.wait()
+
+            context.on("work", listener)
+
+    async def scenario():
+        async with DynamicHost(drain_timeout=0.02) as host:
+            await host.mount(
+                "listener", PluginDefinition("listener", lambda config: Plugin)
+            )
+            task = asyncio.create_task(host.context.parallel("work"))
+            await started.wait()
+            try:
+                with pytest.raises(HostStateError):
+                    await host.unmount("listener")
+            finally:
+                finish.set()
+                await task
+
+    asyncio.run(scenario())
+
+
+def test_async_cleanup_can_dispatch_owned_events_without_deadlock():
+    import subprocess
+    import sys
+
+    script = """
+import asyncio
+from bridge_agent.kernel.dynamic import DynamicHost
+from bridge_agent.contracts.plugins import PluginDefinition
+class Plugin:
+    async def activate(self, context):
+        context.on('cleanup', lambda: print('released'))
+        context.on_close_async(lambda: context.parallel('cleanup'))
+async def main():
+    async with DynamicHost() as host:
+        await host.mount('plugin', PluginDefinition('plugin', lambda config: Plugin))
+asyncio.run(main())
+"""
+    result = subprocess.run(
+        [sys.executable, "-I", "-c", script], capture_output=True, text=True, timeout=3
+    )
+    assert result.returncode == 0, result.stderr
+    assert result.stdout == "released\n"
+
+
+def test_pending_effect_acquisition_is_drained_before_unmount():
+    contexts = []
+    released = []
+
+    class Plugin:
+        async def activate(self, context):
+            contexts.append(context)
+
+    async def scenario():
+        started, finish = asyncio.Event(), asyncio.Event()
+        async with DynamicHost() as host:
+            await host.mount(
+                "resource", PluginDefinition("resource", lambda config: Plugin)
+            )
+
+            async def acquire():
+                started.set()
+                await finish.wait()
+                return lambda: released.append("closed")
+
+            acquisition = asyncio.create_task(contexts[0].effect(acquire))
+            await started.wait()
+            removal = asyncio.create_task(host.unmount("resource"))
+            await asyncio.sleep(0)
+            assert not removal.done()
+            finish.set()
+            await acquisition
+            await removal
+            assert released == ["closed"]
+            assert host.status("resource").state == "disposed"
+
+    asyncio.run(scenario())

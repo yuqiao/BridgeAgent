@@ -6,19 +6,27 @@ from bridge_agent.contracts.plugins import PluginDefinition
 
 
 class ExampleRuntime:
+    def __init__(self, prefix):
+        self.prefix = prefix
+
     async def run(self, request):
-        return RunResult(text="external: " + request.text)
+        return RunResult(text=self.prefix + request.text)
 
 
 class ExamplePlugin:
+    def __init__(self, prefix):
+        self.prefix = prefix
+
     async def activate(self, context):
-        context.provide(AGENT_RUNTIME, ExampleRuntime())
+        context.provide(AGENT_RUNTIME, ExampleRuntime(self.prefix))
 
 
 def prepare(config):
-    if config:
-        raise ValueError("No options supported")
-    return ExamplePlugin
+    if set(config) - {"prefix"} or not isinstance(
+        config.get("prefix", "external: "), str
+    ):
+        raise ValueError("Only a string prefix is supported")
+    return lambda: ExamplePlugin(config.get("prefix", "external: "))
 
 
 plugin = PluginExport(

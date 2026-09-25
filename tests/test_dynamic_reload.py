@@ -363,3 +363,45 @@ def test_reload_cannot_claim_another_active_providers_service():
             assert host.context.require(RESULT) == "other"
 
     asyncio.run(scenario())
+
+
+def test_explicit_reload_restarts_a_volatile_plugin_even_when_config_is_unchanged():
+    starts = []
+
+    class Plugin:
+        async def activate(self, context):
+            starts.append("start")
+
+    definition = PluginDefinition(
+        "live", lambda config: Plugin, volatile_fields=("value",)
+    )
+
+    async def scenario():
+        async with DynamicHost() as host:
+            await host.mount("live", definition, {"value": 1})
+            await host.reload("live")
+            assert starts == ["start", "start"]
+
+    asyncio.run(scenario())
+
+
+def test_nested_lease_does_not_deadlock_behind_a_waiting_update():
+    waiting = asyncio.Event()
+
+    async def scenario():
+        async with DynamicHost(drain_timeout=1) as host:
+            await host.mount("provider", provider([]), {"value": "one"})
+
+            async def update():
+                waiting.set()
+                await host.reconfigure("provider", {"value": "two"})
+
+            async with host.lease():
+                task = asyncio.create_task(update())
+                await waiting.wait()
+                async with asyncio.timeout(0.1), host.lease() as context:
+                    assert context.require(VALUE) == "one"
+            await task
+            assert host.context.require(VALUE) == "two"
+
+    asyncio.run(scenario())

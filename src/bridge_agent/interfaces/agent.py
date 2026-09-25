@@ -9,6 +9,7 @@ from pathlib import Path
 
 from bridge_agent.application.agent import AgentSession
 from bridge_agent.bootstrap.agent import agent_catalog, read_environment
+from bridge_agent.bootstrap.dynamic_agent import RunningDynamic, open_dynamic
 from bridge_agent.contracts.agent import AGENT_RUNTIME, RunResult
 from bridge_agent.contracts.errors import AgentSessionError, BridgeAgentError
 from bridge_agent.contracts.sessions import SESSION_CONTROL
@@ -40,7 +41,18 @@ async def run(arguments: argparse.Namespace) -> int:
             workspace=arguments.workspace,
             approval=ConsoleApproval(reader) if interactive else None,
         )
-        async with PluginHost(catalog.load(arguments.config)) as host:
+        manager = (
+            open_dynamic(
+                catalog,
+                arguments.config,
+                entry=arguments.entry,
+                watch=arguments.watch,
+                on_reload=lambda _: print("Reloaded", file=sys.stderr, flush=True),
+            )
+            if arguments.dynamic
+            else PluginHost(catalog.load(arguments.config))
+        )
+        async with manager as host:
             if arguments.session_status:
                 info = await host.resolve(SESSION_CONTROL).get_session(
                     arguments.session_id
@@ -69,7 +81,20 @@ async def run(arguments: argparse.Namespace) -> int:
                 text = line.decode("utf-8").strip()
                 if text == "/exit":
                     break
-                if text == "/new":
+                if text == "/plugins" and isinstance(host, RunningDynamic):
+                    print(
+                        json.dumps([asdict(item) for item in host.instances]),
+                        flush=True,
+                    )
+                elif text == "/reload" and isinstance(host, RunningDynamic):
+                    try:
+                        await host.reload()
+                        print("Reloaded", file=sys.stderr)
+                    except Exception as error:
+                        for message in _error_lines(error):
+                            print(message, file=sys.stderr)
+                        status = 1
+                elif text == "/new":
                     session = AgentSession(
                         host.resolve(AGENT_RUNTIME), arguments.workspace
                     )
@@ -112,6 +137,11 @@ def main() -> int:
     )
     parser.add_argument("--show-tools", action="store_true")
     parser.add_argument(
+        "--dynamic",
+        action="store_true",
+        help="Use a version 2 dynamic entry tree (/plugins, /reload)",
+    )
+    parser.add_argument(
         "--session-id",
         help="Continue or create this session in the configured checkpoint store",
     )
@@ -120,7 +150,17 @@ def main() -> int:
         action="store_true",
         help="Inspect a saved session without calling the model",
     )
+    parser.add_argument(
+        "--watch",
+        action="store_true",
+        help="Watch dynamic configuration and declared plugin sources",
+    )
+    parser.add_argument("--entry", help="Use the Context of this dynamic entry")
     arguments = parser.parse_args()
+    if arguments.entry and not arguments.dynamic:
+        parser.error("--entry requires --dynamic")
+    if arguments.watch and not arguments.dynamic:
+        parser.error("--watch requires --dynamic")
     if arguments.session_status and (
         not arguments.session_id or arguments.prompt is not None
     ):

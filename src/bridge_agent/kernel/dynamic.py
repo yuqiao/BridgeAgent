@@ -8,6 +8,7 @@ from contextlib import (
     AbstractContextManager,
     asynccontextmanager,
 )
+from contextvars import ContextVar
 from copy import deepcopy
 from dataclasses import dataclass, field
 from types import MappingProxyType
@@ -26,6 +27,16 @@ from bridge_agent.contracts.plugins import (
 )
 from bridge_agent.kernel.context import ContextState, OwnedContext
 from bridge_agent.kernel.events import Events, Listener, invoke
+
+
+@dataclass
+class MutationWindow:
+    active: bool = True
+
+
+@dataclass
+class LeaseGroup:
+    count: int = 0
 
 
 @dataclass(frozen=True)
@@ -118,7 +129,7 @@ class Context:
         self._labels = dict(labels or {})
         self._metadata: dict[str, object] = {}
         self._filter: Callable[[Context], bool] | None = None
-        self._intercepts: dict[ServiceIdentity, dict[str, object]] = {}
+        self._intercepts: dict[ServiceIdentity, tuple[dict[str, object], ...]] = {}
 
     def _copy(self, owned: DynamicResources | None = None) -> "Context":
         result = Context(self._host, owned or self._owned, self._labels)
@@ -142,10 +153,10 @@ class Context:
         self, key: ServiceIdentity, config: Mapping[str, object]
     ) -> "Context":
         result = self._copy()
-        result._intercepts[key] = {
-            **result._intercepts.get(key, {}),
-            **deepcopy(dict(config)),
-        }
+        result._intercepts[key] = (
+            *result._intercepts.get(key, ()),
+            deepcopy(dict(config)),
+        )
         return result
 
     def config_for(
@@ -153,10 +164,19 @@ class Context:
         key: ServiceIdentity,
         base: Mapping[str, object] | None = None,
         head: Mapping[str, object] | None = None,
+        *,
+        merge: Callable[[tuple[dict[str, object], ...]], dict[str, object]]
+        | None = None,
     ) -> dict[str, object]:
-        return deepcopy(
-            {**(base or {}), **self._intercepts.get(key, {}), **(head or {})}
+        configs = deepcopy(
+            (dict(base or {}), *self._intercepts.get(key, ()), dict(head or {}))
         )
+        if merge is not None:
+            return merge(configs)
+        result: dict[str, object] = {}
+        for config in configs:
+            result.update(config)
+        return result
 
     def isolate(self, key: ServiceIdentity, label: object | None = None) -> "Context":
         result = self._copy()
@@ -239,49 +259,53 @@ class Context:
         return self._host._events.bail(name, args, self._filter)
 
     async def serial(self, name: str, *args: object) -> object:
-        return await self._host._events.serial(name, args, self._filter)
+        async with self._host.lease(self):
+            return await self._host._events.serial(name, args, self._filter)
 
     async def parallel(self, name: str, *args: object) -> None:
-        await self._host._events.parallel(name, args, self._filter)
+        async with self._host.lease(self):
+            await self._host._events.parallel(name, args, self._filter)
 
     async def waterfall(self, name: str, *args: object, next: Listener) -> object:
-        return await self._host._events.waterfall(name, args, next, self._filter)
+        async with self._host.lease(self):
+            return await self._host._events.waterfall(name, args, next, self._filter)
 
     async def effect(
         self, execute: Listener, *, label: str = "resource"
     ) -> Callable[[], Awaitable[None]]:
-        owner = self._owner()
-        if owner.state not in (ContextState.ACTIVATING, ContextState.ACTIVE):
-            raise PluginProtocolError("Cannot create effect on inactive Context")
-        cleanup = await invoke(execute)
-        if not callable(cleanup):
-            raise PluginProtocolError("Effect must return a disposer")
-        token = object()
-        owner.effects[token] = label
+        async with self._host.lease(self):
+            owner = self._owner()
+            if owner.state not in (ContextState.ACTIVATING, ContextState.ACTIVE):
+                raise PluginProtocolError("Cannot create effect on inactive Context")
+            cleanup = await invoke(execute)
+            if not callable(cleanup):
+                raise PluginProtocolError("Effect must return a disposer")
+            token = object()
+            owner.effects[token] = label
 
-        task: asyncio.Task[object] | None = None
+            task: asyncio.Task[object] | None = None
 
-        async def dispose() -> None:
-            nonlocal task
-            if task is None:
-                task = asyncio.create_task(invoke(cleanup))
-            cancelled: asyncio.CancelledError | None = None
-            while not task.done():
-                try:
-                    await asyncio.shield(task)
-                except asyncio.CancelledError as error:
-                    cancelled = error
-            owner.effects.pop(token, None)
-            task.result()
-            if cancelled:
-                raise cancelled
+            async def dispose() -> None:
+                nonlocal task
+                if task is None:
+                    task = asyncio.create_task(invoke(cleanup))
+                cancelled: asyncio.CancelledError | None = None
+                while not task.done():
+                    try:
+                        await asyncio.shield(task)
+                    except asyncio.CancelledError as error:
+                        cancelled = error
+                owner.effects.pop(token, None)
+                task.result()
+                if cancelled:
+                    raise cancelled
 
-        try:
-            self.on_close_async(dispose)
-        except BaseException:
-            await dispose()
-            raise
-        return dispose
+            try:
+                self.on_close_async(dispose)
+            except BaseException:
+                await dispose()
+                raise
+            return dispose
 
     def logger(self, name: str) -> logging.Logger:
         return logging.getLogger("bridge_agent.plugins." + name)
@@ -348,23 +372,45 @@ class DynamicHost:
         self._closed = False
         self._gate = asyncio.Lock()
         self._mutator: asyncio.Task[object] | None = None
+        self._mutation_window: ContextVar[MutationWindow | None] = ContextVar(
+            "bridge_agent_mutation", default=None
+        )
         self._idle = asyncio.Event()
         self._idle.set()
         self._leases = 0
+        self._lease_group: ContextVar[LeaseGroup | None] = ContextVar(
+            "bridge_agent_lease", default=None
+        )
         self._drain_timeout = drain_timeout
         self._order: list[str] = []
 
     @asynccontextmanager
     async def lease(self, context: Context | None = None) -> AsyncIterator[Context]:
-        async with self._gate:
-            if self._closed:
-                raise HostStateError("Dynamic host is closed")
-            self._leases += 1
-            self._idle.clear()
+        scope = context or self.context
+        if scope._host is not self:
+            raise PluginProtocolError("Context belongs to another host")
+        window = self._mutation_window.get()
+        if window is not None and window.active:
+            yield scope
+            return
+        group = self._lease_group.get()
+        token = None
+        if group is None or group.count == 0:
+            async with self._gate:
+                if self._closed:
+                    raise HostStateError("Dynamic host is closed")
+                group = LeaseGroup()
+                token = self._lease_group.set(group)
+                self._idle.clear()
+        group.count += 1
+        self._leases += 1
         try:
-            yield context or self.context
+            yield scope
         finally:
+            group.count -= 1
             self._leases -= 1
+            if token is not None:
+                self._lease_group.reset(token)
             if not self._leases:
                 self._idle.set()
 
@@ -375,6 +421,9 @@ class DynamicHost:
         if self._mutator is asyncio.current_task():
             yield
             return
+        inherited = self._mutation_window.get()
+        if inherited is not None and inherited.active:
+            raise HostStateError("A lifecycle child task cannot mutate the same host")
         async with self._gate:
             if self._closed and not allow_closed:
                 raise HostStateError("Dynamic host is closed")
@@ -386,9 +435,13 @@ class DynamicHost:
                     "Timed out waiting for in-flight calls; no resources released"
                 ) from None
             self._mutator = asyncio.current_task()
+            window = MutationWindow()
+            token = self._mutation_window.set(window)
             try:
                 yield
             finally:
+                window.active = False
+                self._mutation_window.reset(token)
                 self._mutator = None
 
     @asynccontextmanager
@@ -597,13 +650,14 @@ class DynamicHost:
         config: Mapping[str, object],
         *,
         definition: PluginDefinition | None = None,
+        force: bool = False,
     ) -> bool:
         async with self._mutation():
             applied = False
 
             async def apply() -> None:
                 nonlocal applied
-                await self._replace(instance_id, config, definition)
+                await self._replace(instance_id, config, definition, force=force)
                 applied = True
 
             await self.context.waterfall(
@@ -616,6 +670,8 @@ class DynamicHost:
         instance_id: str,
         config: Mapping[str, object],
         definition: PluginDefinition | None,
+        *,
+        force: bool = False,
     ) -> None:
         instance = self._instances[instance_id]
         definition = definition or instance.definition
@@ -633,7 +689,8 @@ class DynamicHost:
             definition.provides,
         )
         if (
-            definition is instance.definition
+            not force
+            and definition is instance.definition
             and definition.volatile_fields
             and instance.state == "active"
             and ordinary_config(config, definition.volatile_fields)
@@ -684,7 +741,10 @@ class DynamicHost:
         self, instance_id: str, definition: PluginDefinition | None = None
     ) -> bool:
         return await self.reconfigure(
-            instance_id, self._instances[instance_id].config, definition=definition
+            instance_id,
+            self._instances[instance_id].config,
+            definition=definition,
+            force=True,
         )
 
     def _dependents(self, ids: set[str]) -> set[str]:

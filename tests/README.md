@@ -60,3 +60,12 @@
 `test_persistent_sessions.py` 通过公开 Agent/SessionControl 与插件宿主验证持久恢复、隔离、兼容与资源归属；`test_persistent_cli.py` 使用独立 CLI 进程验证重启、数据库占用和 SIGKILL 后拒绝重放。状态与历史均来自 checkpoint，测试不直接查询数据库表。
 
 阶段 5 在已确认的 preview/apply、run/cancel、审批、YAML、AgentRuntime、CLI 边界逐条 TDD。命令使用实际子进程，审批 CLI 使用 PTY；仅模型与原子替换故障注入使用外部边界替身。具体证据见 docs/stages/05-edit-and-test.md。
+
+
+## 阶段 6–7
+
+阶段 6 使用真实独立发行包/entry point 验证发现与替换，元数据冲突等错误只在外部 metadata 边界替换。阶段 7 通过 DynamicHost/Context、DynamicLoader、SourceReloader、AgentRuntime 和真实 CLI 验证公开行为，不调用内部 registry 实现方法。
+
+动态依赖、作用域、事件、配置树、源码文件重载依次按单行为 red→green 实现。阶段 7.5 新增 CLI watcher、声明式外部源码清单、非模块文件通知、租约重入、effect 创建排空、归一化配置预检等先复现失败再修正。已有行为的重复重载压力与动态 CLI 回归直接通过，记录为验收，不伪造 red。
+
+测试使用真实 asyncio 同步门、临时 Python 文件与文件句柄、LangChain 图、本地 HTTP 服务和 PTY 子进程。`test_dynamic_agent.py` 反复替换模型与扩展，检查隔离分支、监听器次数和全部文件关闭。`test_dynamic_cli.py` 检查动态命令与等待输入期间的配置监听；workspace/coding CLI 同时覆盖静态和动态模式。完整证据见 docs/stages/07.5-integration.md。

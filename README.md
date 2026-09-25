@@ -2,11 +2,16 @@
 
 目标：构建一个参考 DeepSeek Harness 的可插件化 Agent。
 
-**当前阶段：阶段 1 已完成；阶段 2/3 已实现 Agent 闭环和只读仓库工具，真实端点验收受限流阻塞。**
-支持 YAML 插件装配、LangChain 运行时、OpenAI 兼容模型、加法工具和内存多轮会话。
-真实端点当前返回限流，验收状态见 [阶段 2](docs/stages/02-agent-loop.md)。完整 Cordis 风格动态插件机制在阶段 7 实现。
+**当前状态：阶段 0–7 的代码与本地验收已完成。** 支持只读问答、Skills、SQLite 会话恢复、审批后的文件修改和命名命令、独立插件包，以及 Cordis 风格动态插件机制。真实仓库问答已通过；加法工具与同会话追问的验收仍受端点限流影响，状态见 [阶段 2](docs/stages/02-agent-loop.md) 与 [路线图](docs/roadmap.md)。
 
-阶段 4 已支持 SQLite 持久会话与跨进程恢复，见 [会话指南](docs/guides/sessions.md)。
+动态装配、作用域、事件和热重载见 [动态插件指南](docs/guides/dynamic-plugins.md)，无需密钥即可体验：
+
+```bash
+uv sync --locked
+uv run --locked python -m bridge_agent.interfaces.agent --dynamic --watch --config examples/dynamic-external.yaml
+```
+
+完整编码助手使用 `examples/dynamic.yaml`；静态配置和原插件接口继续支持。阶段 7 的实现依据见 [能力矩阵](docs/stages/07-cordis-matrix.md)。
 
 架构讨论、技术栈与阶段路线图见 [设计文档](docs/README.md)。
 只读仓库问答见 [使用指南](docs/guides/workspace.md)，配置为 `examples/workspace.yaml`。基础 Skill 已接入，见 [Skill 指南](docs/guides/skills.md) 与 `examples/skills.yaml`。
@@ -82,7 +87,7 @@ uv run --locked python -m bridge_agent.interfaces.agent \
 
 省略 `--prompt` 进入串行多轮，支持 `/new`、`/exit` 和 Ctrl+C。
 `--env-override` 使指定文件中的配置优先，避免已有进程环境覆盖项目凭据。
-当前工具只做加法，不读取工作区文件。配置、限制、Python 接口与真实验收命令见 [Agent 使用指南](docs/guides/agent.md)。
+这份 agent.yaml 示例只启用加法工具；仓库读取与修改分别使用 workspace.yaml、coding.yaml 或 dynamic.yaml。配置、限制、Python 接口与真实验收命令见 [Agent 使用指南](docs/guides/agent.md)。
 
 默认 `pytest` 不调用真实模型；显式验收使用 `uv run --locked pytest tests/test_agent_live.py --run-live -v --tb=short`。
 

@@ -9,3 +9,5 @@ from bridge_agent.contracts.plugins import PluginDefinition
 class PluginExport:
     api_version: int
     definition: PluginDefinition
+    reload_modules: tuple[str, ...] = ()
+    restart_modules: tuple[str, ...] = ()

@@ -12,8 +12,9 @@ from pathlib import Path
 import pytest
 
 
+@pytest.mark.parametrize("dynamic", [False, True])
 @pytest.mark.parametrize("reply", ["y", "n", None])
-def test_cli_approval_controls_the_write(tmp_path: Path, reply):
+def test_cli_approval_controls_the_write(tmp_path: Path, reply, dynamic):
     (tmp_path / "code.py").write_text("old\n")
     config = tmp_path / "agent.yaml"
     config.write_text("""version: 1
@@ -27,6 +28,22 @@ plugins:
     config: {commands: {}}
   - name: tools.coding
 """)
+
+    if dynamic:
+        import yaml
+
+        document = yaml.safe_load(config.read_text())
+        config.write_text(
+            json.dumps(
+                {
+                    "version": 2,
+                    "entries": [
+                        {"id": f"plugin-{index}", **row}
+                        for index, row in enumerate(document["plugins"])
+                    ],
+                }
+            )
+        )
 
     class Handler(BaseHTTPRequestHandler):
         def log_message(self, *args):
@@ -93,6 +110,7 @@ plugins:
                 "-I",
                 "-m",
                 "bridge_agent.interfaces.agent",
+                *(["--dynamic"] if dynamic else []),
                 "--config",
                 str(config),
                 "--workspace",

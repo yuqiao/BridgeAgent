@@ -1,6 +1,6 @@
 # 阶段 3：只读仓库问答
 
-状态：代码、本地验收与 review 已完成；C10 真实端点验收返回限流，保持未通过。公开测试边界与 [阶段 3–7 计划](03-07-delivery-plan.md) 已获用户确认。使用见 [只读仓库指南](../guides/workspace.md)。
+状态：代码、本地验收与 review 已完成；C10 在阶段 7.5 最终复验时通过，使用原 .env 完成真实文件工具闭环。公开测试边界与 [阶段 3–7 计划](03-07-delivery-plan.md) 已获用户确认。使用见 [只读仓库指南](../guides/workspace.md)。
 
 ## 交付目标
 
@@ -42,7 +42,7 @@
 | C07 | 相同工具使用替代文件 provider，无需修改工具、应用或 Agent 循环 | PluginHost + AgentRuntime.run |
 | C08 | Agent 实际执行检索和读取，回答包含工具返回的文件位置 | AgentRuntime.run，确定性外部模型替身 |
 | C09 | 用户可从 CLI 对一个示例仓库提问，单次与串行交互继续有效 | 真实 CLI 子进程，本地 HTTP 模型端点 |
-| C10 | 配置的真实模型完成文件工具闭环，回答引用的路径和行号可核对 | 显式启用的 live 验收；失败如实记录 |
+| C10 | 配置的真实模型完成文件工具闭环，回答引用的路径和行号可核对 | test_workspace_live.py 显式真实验收已通过，见后续记录 |
 
 C08/C09 的模型响应可以在系统边界替代，文件、工具、宿主和循环使用真实实现。替代 provider 应是公开协议的独立实现，不能靠修改私有字段或 mock 内部函数制造替换成功。
 
@@ -67,3 +67,8 @@ C08/C09 的模型响应可以在系统边界替代，文件、工具、宿主和
 执行结果：全套本地测试 124 项通过，2 项 live 默认跳过；Ruff、格式检查、mypy 和 sdist/wheel 构建通过。独立 wheel 的 6 项 CLI 测试通过（原有 5 项加仓库读取 1 项）。
 
 C10：显式执行 `pytest tests/test_workspace_live.py --run-live --tb=short`，使用原 .env，约 3 秒返回 `AgentExecutionError <- OpenAIRateLimitError <- RateLimitError`。测试只向模型发送临时生成的两行代码。未将端点失败伪装为成功；`stage3` 标记代码与本地验收里程碑，完整真实验收仍待端点可用。
+
+
+### 阶段 7.5 真实复验（2026-09-25）
+
+显式执行 `pytest tests/test_agent_live.py tests/test_workspace_live.py --run-live -q`：仓库验收 **1 passed**，加法/追问验收 **1 failed**（RateLimitError）。C10 实际执行 read_file，读取临时 answer.py 并在最终回答中返回 42、文件名与第 2 行，所有断言通过。保留 stage3 当时未通过的历史记录；现在 C10 已关闭，阶段 2 B11 独立保持未通过。未更换模型、地址或凭据。
