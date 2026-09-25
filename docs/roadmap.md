@@ -83,6 +83,8 @@
 
 ## 阶段 7：完整 Cordis 风格插件机制
 
+7.1 能力清单已 review，实施状态及差异见 [完整性矩阵](stages/07-cordis-matrix.md)。
+
 根据用户追加要求，将完整插件机制作为阶段 6 之后的明确交付目标，不再仅列为可选扩展。采用独立 Python 实现，以参考基线中的 Cordis 插件框架能力与行为为对齐对象；不承诺直接加载 JavaScript/TypeScript 插件。
 
 - **7.1 能力对齐清单**：基于 [参考基线](reference-architecture.md) 逐项盘点 Cordis 的公开能力、生命周期和失败语义，建立“参考行为 → Python 设计 → 验收测试”矩阵。区分 Cordis 核心、loader/HMR 配套能力和 Harness 产品功能，明确语言映射及差异。

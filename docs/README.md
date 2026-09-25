@@ -37,3 +37,5 @@
 - [修改与运行测试](guides/coding.md) / [阶段 5 验收](stages/05-edit-and-test.md)
 
 - [外部插件与配置组合](guides/external-plugins.md) / [阶段 6 验收](stages/06-external-plugins.md)
+
+- [Cordis 完整性矩阵（阶段 7）](stages/07-cordis-matrix.md)
