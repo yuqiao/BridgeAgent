@@ -121,17 +121,12 @@ class DynamicLoader:
                 temporary.unlink(missing_ok=True)
 
     async def _apply(self, entries: list[Entry]) -> None:
-        async with self.host.transaction():
-            previous = list(self._entries.values())
+        async with self.host.batch():
+            previous = self._entries, self._contexts, list(self._mounted)
             try:
                 await self._apply_entries(entries)
-            except BaseException as error:
-                try:
-                    await self._apply_entries(previous)
-                except BaseException as rollback:
-                    raise BaseExceptionGroup(
-                        "Tree update and rollback failed", [error, rollback]
-                    ) from None
+            except BaseException:
+                self._entries, self._contexts, self._mounted = previous
                 raise
 
     async def _apply_entries(self, entries: list[Entry]) -> None:

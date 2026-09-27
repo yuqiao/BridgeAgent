@@ -197,73 +197,69 @@ class SourceReloader:
             old_modules = {name: sys.modules[name] for name in names}
             old_definitions = {ident: self.host.definition(ident) for ident in affected}
             parent_attributes: list[tuple[types.ModuleType, str, object, bool]] = []
-            replaced: list[str] = []
-            try:
-                for name in names:
-                    old = old_modules[name]
-                    fresh = types.ModuleType(name)
-                    fresh.__file__ = str(self._modules[name].path)
-                    fresh.__package__ = old.__package__
-                    fresh.__spec__ = old.__spec__
-                    if hasattr(old, "__path__"):
-                        fresh.__path__ = old.__path__
-                    sys.modules[name] = fresh
-                    parent_name, _, short_name = name.rpartition(".")
-                    parent = sys.modules.get(parent_name)
-                    if parent is not None:
-                        parent_attributes.append(
-                            (
-                                parent,
-                                short_name,
-                                getattr(parent, short_name, None),
-                                hasattr(parent, short_name),
+            async with self.host.batch():
+                try:
+                    for name in names:
+                        old = old_modules[name]
+                        fresh = types.ModuleType(name)
+                        fresh.__file__ = str(self._modules[name].path)
+                        fresh.__package__ = old.__package__
+                        fresh.__spec__ = old.__spec__
+                        if hasattr(old, "__path__"):
+                            fresh.__path__ = old.__path__
+                        sys.modules[name] = fresh
+                        parent_name, _, short_name = name.rpartition(".")
+                        parent = sys.modules.get(parent_name)
+                        if parent is not None:
+                            parent_attributes.append(
+                                (
+                                    parent,
+                                    short_name,
+                                    getattr(parent, short_name, None),
+                                    hasattr(parent, short_name),
+                                )
                             )
+                            setattr(parent, short_name, fresh)
+                        exec(
+                            compile(data[name], fresh.__file__, "exec"), fresh.__dict__
                         )
-                        setattr(parent, short_name, fresh)
-                    exec(compile(data[name], fresh.__file__, "exec"), fresh.__dict__)
-                for ident in affected:
-                    source = self._sources[ident]
-                    export = getattr(sys.modules[source.module], source.attribute)
-                    if (
-                        not isinstance(export, PluginExport)
-                        or export.api_version != 1
-                        or export.definition.name != old_definitions[ident].name
+                    for ident in affected:
+                        source = self._sources[ident]
+                        export = getattr(sys.modules[source.module], source.attribute)
+                        if (
+                            not isinstance(export, PluginExport)
+                            or export.api_version != 1
+                            or export.definition.name != old_definitions[ident].name
+                        ):
+                            raise ConfigurationError(
+                                "Reloaded plugin export is incompatible"
+                            )
+                        definition = replace(
+                            export.definition,
+                            requires=tuple(
+                                dict.fromkeys(
+                                    (
+                                        *export.definition.requires,
+                                        *source.extra_requires,
+                                    )
+                                )
+                            ),
+                        )
+                        if not await self.host.reload(ident, definition):
+                            raise ConfigurationError("Source update was vetoed")
+                except BaseException:
+                    sys.modules.update(old_modules)
+                    for parent, short_name, value, existed in reversed(
+                        parent_attributes
                     ):
-                        raise ConfigurationError(
-                            "Reloaded plugin export is incompatible"
-                        )
-                    definition = replace(
-                        export.definition,
-                        requires=tuple(
-                            dict.fromkeys(
-                                (*export.definition.requires, *source.extra_requires)
-                            )
-                        ),
-                    )
-                    if not await self.host.reload(ident, definition):
-                        raise ConfigurationError("Source update was vetoed")
-                    replaced.append(ident)
-            except BaseException as error:
-                sys.modules.update(old_modules)
-                for parent, short_name, value, existed in reversed(parent_attributes):
-                    if existed:
-                        setattr(parent, short_name, value)
-                    else:
-                        delattr(parent, short_name)
-                failures: list[BaseException] = [error]
-                for ident in reversed(replaced):
-                    try:
-                        await self.host.reload(ident, old_definitions[ident])
-                    except BaseException as rollback:
-                        failures.append(rollback)
-                if len(failures) > 1:
-                    raise BaseExceptionGroup(
-                        "Source replacement and rollback failed", failures
-                    ) from None
-                raise
-            finally:
-                for name in changed:
-                    self._modules[name].digest = hashlib.sha256(data[name]).digest()
+                        if existed:
+                            setattr(parent, short_name, value)
+                        else:
+                            delattr(parent, short_name)
+                    raise
+                finally:
+                    for name in changed:
+                        self._modules[name].digest = hashlib.sha256(data[name]).digest()
             result = tuple((*config_changes, *affected))
             if result:
                 self.host._notify("hmr.reload", result)

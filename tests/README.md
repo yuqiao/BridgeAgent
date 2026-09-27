@@ -73,3 +73,13 @@
 ## 架构深化：动态配置准备
 
 2026-09-27：通过 `DynamicLoader.create/update` 验证已激活的配置 hook 可以补齐必填字段，Entry 保存原始配置。先观察到预检在 hook 前抛出 `value required`，再将预检、mount、reconfigure 的配置准备统一到宿主；该回归与已有归一化、配置 hook、volatile、veto 测试共同通过。测试继续使用已确认的公开 seam，不检查私有准备方法。
+
+## 架构深化：批量实例恢复
+
+2026-09-27：`DynamicHost.batch`、DynamicLoader、SourceReloader 共同验证实例恢复职责集中在宿主。新增失败证据包括：宿主缺少批量恢复入口；源码批次部分成功后，补偿再次经过 update veto，旧源码配上了新实例；一个旧实例恢复失败时跳过其他独立实例；批次内关闭宿主无法恢复。逐项修正后通过。
+
+取消期间继续恢复且阻止等待调用、嵌套批次恢复 volatile 配置引用两项直接通过，记录为验收，不伪造 red。既有整树失败、消费者依赖链失败、作用域、源码父包属性和资源释放测试继续保留。
+
+最后自查新增 volatile 更新后重启失败的回归，先复现旧 factory 捕获的值与已更新 Context.config 不一致，再保存最新已准备 factory；恢复时仍保持未重启实例及其配置引用。
+
+最终验证：274 passed、2 skipped（真实端点测试未启用）；Ruff 检查与格式检查、mypy（53 文件）、sdist/wheel 构建及 `git diff --check` 通过。两项分别完成标准和需求 review。

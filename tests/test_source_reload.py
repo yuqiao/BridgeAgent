@@ -22,6 +22,72 @@ plugin = PluginExport(1, PluginDefinition('runtime.source', lambda config: Plugi
 """
 
 
+def test_failed_source_batch_restores_prior_instances_even_when_updates_are_vetoed(
+    tmp_path, monkeypatch
+):
+    import pytest
+
+    from bridge_agent.contracts.errors import PluginActivationError
+    from bridge_agent.contracts.plugins import PluginDefinition
+
+    modules = []
+    for name in ("first", "second"):
+        file = tmp_path / f"{name}.py"
+        file.write_text(source("old-" + name))
+        module = types.ModuleType("bridge_batch_" + name)
+        module.__file__ = str(file)
+        module.__package__ = ""
+        monkeypatch.setitem(sys.modules, module.__name__, module)
+        exec(compile(file.read_text(), str(file), "exec"), module.__dict__)
+        modules.append(module)
+    request = RunRequest("id", "hello", tmp_path)
+
+    class Observer:
+        async def activate(self, context):
+            async def update(ident, config, next):
+                if ident == "first":
+                    current = await context.require(AGENT_RUNTIME).run(request)
+                    if current.text == "new-first":
+                        return False
+                return await next()
+
+            context.on("internal.update", update)
+
+    async def scenario():
+        async with DynamicHost() as host:
+            child = host.context.isolate(AGENT_RUNTIME)
+            await host.mount("first", modules[0].plugin.definition)
+            await host.mount("second", modules[1].plugin.definition, context=child)
+            await host.mount(
+                "observer",
+                PluginDefinition(
+                    "observer", lambda config: Observer, requires=(AGENT_RUNTIME,)
+                ),
+            )
+            reloader = SourceReloader(host)
+            for name, module in zip(("first", "second"), modules, strict=True):
+                reloader.register(name, module.__name__, "plugin")
+            (tmp_path / "first.py").write_text(source("new-first"))
+            (tmp_path / "second.py").write_text(
+                source("new-second").replace(
+                    "context.provide(AGENT_RUNTIME, Runtime())",
+                    "raise ValueError('broken')",
+                )
+            )
+            with pytest.raises(PluginActivationError):
+                await reloader.check()
+            assert (
+                await host.context.require(AGENT_RUNTIME).run(request)
+            ).text == "old-first"
+            assert (
+                await child.require(AGENT_RUNTIME).run(request)
+            ).text == "old-second"
+            assert sys.modules[modules[0].__name__] is modules[0]
+            assert sys.modules[modules[1].__name__] is modules[1]
+
+    asyncio.run(scenario())
+
+
 def test_changed_source_reloads_and_broken_source_keeps_working_runtime(
     tmp_path, monkeypatch
 ):

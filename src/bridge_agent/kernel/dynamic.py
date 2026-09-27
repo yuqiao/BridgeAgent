@@ -10,7 +10,7 @@ from contextlib import (
 )
 from contextvars import ContextVar
 from copy import deepcopy
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from types import MappingProxyType
 from typing import Self, cast
 
@@ -383,6 +383,7 @@ class DynamicHost:
         )
         self._drain_timeout = drain_timeout
         self._order: list[str] = []
+        self._batch_depth = 0
 
     @asynccontextmanager
     async def lease(self, context: Context | None = None) -> AsyncIterator[Context]:
@@ -449,6 +450,94 @@ class DynamicHost:
         """Serialize a loader update and hold off calls across all entry changes."""
         async with self._mutation():
             yield
+
+    @asynccontextmanager
+    async def batch(self) -> AsyncIterator[None]:
+        """Restore plugin instances if a group of lifecycle changes fails."""
+        async with self._mutation():
+            previous = {
+                ident: replace(
+                    instance,
+                    config=deepcopy(instance.config),
+                    values=dict(instance.values),
+                )
+                for ident, instance in self._instances.items()
+            }
+            self._batch_depth += 1
+            try:
+                yield
+            except BaseException as original:
+                task = asyncio.create_task(self._restore(previous))
+                cancelled: asyncio.CancelledError | None = None
+                while not task.done():
+                    try:
+                        await asyncio.shield(task)
+                    except asyncio.CancelledError as error:
+                        cancelled = error
+                errors = task.result()
+                if isinstance(original, asyncio.CancelledError):
+                    if errors:
+                        raise original from BaseExceptionGroup(
+                            "Batch rollback failed", errors
+                        )
+                    raise
+                if cancelled is not None:
+                    raise cancelled from BaseExceptionGroup(
+                        "Batch rollback interrupted", [original, *errors]
+                    )
+                if errors:
+                    raise BaseExceptionGroup(
+                        "Batch update and rollback failed", [original, *errors]
+                    ) from None
+                raise
+            finally:
+                self._batch_depth -= 1
+
+    async def _restore(self, previous: dict[str, Instance]) -> list[BaseException]:
+        changed = {
+            ident
+            for ident, current in self._instances.items()
+            if ident not in previous
+            or current.owned is not previous[ident].owned
+            or current.definition is not previous[ident].definition
+            or current.scope is not previous[ident].scope
+            or current.state != previous[ident].state
+        }
+        changed = self._dependents(changed)
+        errors: list[BaseException] = list(await self._stop(changed))
+        restored: dict[str, Instance] = {}
+        for ident, saved in previous.items():
+            if ident in changed:
+                restored[ident] = replace(
+                    saved,
+                    state="pending" if saved.state == "active" else saved.state,
+                    owned=None,
+                    values={},
+                )
+            else:
+                current = self._instances[ident]
+                current.config = saved.config
+                current.prepared = saved.prepared
+                current.values.clear()
+                current.values.update(saved.values)
+                if current.owned is not None:
+                    current.owned.config._data = deepcopy(saved.config)
+                restored[ident] = current
+        self._instances = restored
+        while True:
+            pending = {
+                ident for ident, item in restored.items() if item.state == "pending"
+            }
+            try:
+                await self._reconcile()
+                break
+            except BaseException as error:
+                errors.append(error)
+                if pending == {
+                    ident for ident, item in restored.items() if item.state == "pending"
+                }:
+                    break
+        return errors
 
     async def _config(
         self, instance_id: str, config: Mapping[str, object]
@@ -670,7 +759,7 @@ class DynamicHost:
         definition: PluginDefinition | None = None,
         force: bool = False,
     ) -> bool:
-        async with self._mutation():
+        async with self.batch():
             applied = False
 
             async def apply() -> None:
@@ -704,6 +793,7 @@ class DynamicHost:
             == ordinary_config(instance.config, definition.volatile_fields)
         ):
             instance.config = deepcopy(config)
+            instance.prepared = candidate
             assert instance.owned is not None
             instance.owned.config._data = deepcopy(config)
             self._notify(
@@ -713,36 +803,11 @@ class DynamicHost:
         errors = await self._stop(self._dependents({instance_id}))
         if errors:
             raise ExceptionGroup("Replacement cleanup failed", errors)
-        previous = instance.prepared
-        previous_definition = instance.definition
-        previous_config = instance.config
         instance.definition = definition
         instance.config = deepcopy(dict(config))
         instance.prepared = candidate
         self._set_state(instance, "pending")
-        try:
-            await self._reconcile()
-        except BaseException as error:
-            affected = self._dependents({instance_id})
-            cleanup = await self._stop(affected)
-            for ident in affected:
-                if self._instances[ident].state == "failed":
-                    self._set_state(self._instances[ident], "pending")
-            instance.prepared = previous
-            instance.definition = previous_definition
-            instance.config = previous_config
-            self._set_state(instance, "pending")
-            try:
-                await self._reconcile()
-            except BaseException as rollback:
-                raise BaseExceptionGroup(
-                    "Replacement and rollback failed", [error, rollback, *cleanup]
-                ) from None
-            if cleanup:
-                raise BaseExceptionGroup(
-                    "Replacement and cleanup failed", [error, *cleanup]
-                ) from None
-            raise
+        await self._reconcile()
 
     async def reload(
         self, instance_id: str, definition: PluginDefinition | None = None
@@ -812,6 +877,8 @@ class DynamicHost:
 
     async def close(self) -> None:
         async with self._mutation(allow_closed=True):
+            if self._batch_depth:
+                raise HostStateError("Cannot close the host inside a lifecycle batch")
             if self._closed:
                 return
             self._closed = True

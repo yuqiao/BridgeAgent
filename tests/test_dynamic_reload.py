@@ -405,3 +405,229 @@ def test_nested_lease_does_not_deadlock_behind_a_waiting_update():
             assert host.context.require(VALUE) == "two"
 
     asyncio.run(scenario())
+
+
+def test_failed_batch_restores_instances_without_restarting_unaffected_plugins():
+    from bridge_agent.contracts.errors import PluginActivationError
+
+    untouched = ServiceKey[object]("untouched")
+    resources = []
+
+    class Stable:
+        async def activate(self, context):
+            context.provide(untouched, object())
+
+    class Consumer:
+        async def activate(self, context):
+            context.provide(RESULT, "seen:" + context.require(VALUE))
+
+    class Broken:
+        async def activate(self, context):
+            resources.append("opened")
+            context.on_close(lambda: resources.append("closed"))
+            raise ValueError("cannot activate")
+
+    async def scenario():
+        async with DynamicHost() as host:
+            await host.mount("provider", provider([]), {"value": "old"})
+            await host.mount(
+                "consumer",
+                PluginDefinition(
+                    "consumer",
+                    lambda config: Consumer,
+                    requires=(VALUE,),
+                    provides=(RESULT,),
+                ),
+            )
+            await host.mount(
+                "stable",
+                PluginDefinition(
+                    "stable", lambda config: Stable, provides=(untouched,)
+                ),
+            )
+            stable = host.context.require(untouched)
+            with pytest.raises(PluginActivationError):
+                async with host.batch():
+                    await host.reconfigure("provider", {"value": "new"})
+                    await host.mount(
+                        "broken", PluginDefinition("broken", lambda config: Broken)
+                    )
+            assert host.context.require(RESULT) == "seen:old"
+            assert host.context.require(untouched) is stable
+            assert {item.instance_id for item in host.instances} == {
+                "provider",
+                "consumer",
+                "stable",
+            }
+            assert resources == ["opened", "closed"]
+
+    asyncio.run(scenario())
+
+
+def test_batch_rollback_failure_does_not_skip_other_independent_instances():
+    first = ServiceKey[str]("first")
+    second = ServiceKey[str]("second")
+    reject_old = False
+
+    def definition(key):
+        def prepare(config):
+            class Plugin:
+                async def activate(self, context):
+                    if reject_old and key is first and config["value"] == "old":
+                        raise ValueError("old first unavailable")
+                    context.provide(key, config["value"])
+
+            return Plugin
+
+        return PluginDefinition(key.name, prepare, provides=(key,))
+
+    async def scenario():
+        nonlocal reject_old
+        async with DynamicHost() as host:
+            await host.mount("first", definition(first), {"value": "old"})
+            await host.mount("second", definition(second), {"value": "old"})
+            with pytest.raises(BaseExceptionGroup) as raised:
+                async with host.batch():
+                    await host.reconfigure("first", {"value": "new"})
+                    await host.reconfigure("second", {"value": "new"})
+                    reject_old = True
+                    raise RuntimeError("batch rejected")
+            assert str(raised.value.exceptions[0]) == "batch rejected"
+            assert host.status("first").state == "failed"
+            assert host.context.require(second) == "old"
+
+    asyncio.run(scenario())
+
+
+def test_cancelled_batch_finishes_restoring_before_releasing_waiting_calls():
+    changed = asyncio.Event()
+    restoring = asyncio.Event()
+    finish = asyncio.Event()
+    rolling_back = False
+
+    def prepare(config):
+        class Plugin:
+            async def activate(self, context):
+                if rolling_back and config["value"] == "old":
+                    restoring.set()
+                    await finish.wait()
+                context.provide(VALUE, config["value"])
+
+        return Plugin
+
+    async def scenario():
+        nonlocal rolling_back
+        async with DynamicHost() as host:
+            await host.mount(
+                "provider",
+                PluginDefinition("provider", prepare, provides=(VALUE,)),
+                {"value": "old"},
+            )
+
+            async def update():
+                async with host.batch():
+                    await host.reconfigure("provider", {"value": "new"})
+                    changed.set()
+                    await asyncio.Event().wait()
+
+            async def read():
+                async with host.lease() as context:
+                    return context.require(VALUE)
+
+            task = asyncio.create_task(update())
+            await asyncio.wait_for(changed.wait(), 2)
+            rolling_back = True
+            task.cancel()
+            try:
+                await asyncio.wait_for(restoring.wait(), 2)
+                reader = asyncio.create_task(read())
+                task.cancel()
+                await asyncio.sleep(0)
+                assert not task.done()
+                assert not reader.done()
+            finally:
+                finish.set()
+            with pytest.raises(asyncio.CancelledError):
+                await task
+            assert await reader == "old"
+
+    asyncio.run(scenario())
+
+
+def test_batch_rejects_closing_the_host_before_any_resources_are_released():
+    from bridge_agent.contracts.errors import HostStateError
+
+    events = []
+
+    async def scenario():
+        async with DynamicHost() as host:
+            await host.mount("provider", provider(events), {"value": "old"})
+            with pytest.raises(HostStateError, match="batch"):
+                async with host.batch():
+                    await host.close()
+            async with host.lease() as context:
+                assert context.require(VALUE) == "old"
+            assert events == ["start:old"]
+
+    asyncio.run(scenario())
+
+
+def test_nested_batches_restore_volatile_configuration_in_the_same_reference():
+    view_key = ServiceKey[object]("config-view")
+
+    class Plugin:
+        async def activate(self, context):
+            context.provide(view_key, context.config)
+
+    definition = PluginDefinition(
+        "config",
+        lambda config: Plugin,
+        provides=(view_key,),
+        volatile_fields=("level",),
+    )
+
+    async def scenario():
+        async with DynamicHost() as host:
+            await host.mount("config", definition, {"level": 1})
+            view = host.context.require(view_key)
+            with pytest.raises(RuntimeError, match="outer"):
+                async with host.batch():
+                    await host.reconfigure("config", {"level": 2})
+                    with pytest.raises(ValueError, match="inner"):
+                        async with host.batch():
+                            await host.reconfigure("config", {"level": 3})
+                            raise ValueError("inner")
+                    assert view["level"] == 2
+                    raise RuntimeError("outer")
+            assert host.context.require(view_key) is view
+            assert view["level"] == 1
+
+    asyncio.run(scenario())
+
+
+def test_failed_restart_uses_the_latest_prepared_volatile_configuration():
+    from bridge_agent.contracts.errors import PluginActivationError
+
+    def prepare(config):
+        class Plugin:
+            async def activate(self, context):
+                if config["mode"] == "broken":
+                    raise ValueError("broken")
+                assert config["level"] == context.config["level"]
+                context.provide(VALUE, str(config["level"]))
+
+        return Plugin
+
+    definition = PluginDefinition(
+        "live", prepare, provides=(VALUE,), volatile_fields=("level",)
+    )
+
+    async def scenario():
+        async with DynamicHost() as host:
+            await host.mount("live", definition, {"mode": "normal", "level": 1})
+            await host.reconfigure("live", {"mode": "normal", "level": 2})
+            with pytest.raises(PluginActivationError):
+                await host.reconfigure("live", {"mode": "broken", "level": 3})
+            assert host.context.require(VALUE) == "2"
+
+    asyncio.run(scenario())
