@@ -183,12 +183,9 @@ class DynamicLoader:
                 ),
             )
             contexts[entry.id] = context
-            checked = (
-                definition.validate_config(entry.config)
-                if definition.validate_config
-                else entry.config
+            await self.host.validate_config(
+                entry.id, definitions[entry.id], entry.config
             )
-            definitions[entry.id].prepare(checked)
         enabled: set[str] = set()
         remount: set[str] = set()
         for entry in ordered.values():

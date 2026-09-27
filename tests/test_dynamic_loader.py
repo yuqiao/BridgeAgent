@@ -35,6 +35,52 @@ entries:
     asyncio.run(scenario())
 
 
+def test_entry_creation_and_update_use_configuration_hooks_before_validation():
+    from bridge_agent.bootstrap.config import PluginCatalog
+    from bridge_agent.contracts.plugins import PluginDefinition, ServiceKey
+
+    key = ServiceKey[str]("configured")
+
+    class Hook:
+        async def activate(self, context):
+            context.on(
+                "internal.config",
+                lambda ident, config, next: (
+                    {"value": config.get("input", "initial").upper()}
+                    if ident == "target"
+                    else next()
+                ),
+            )
+
+    def validate(config):
+        if "value" not in config:
+            raise ValueError("value required")
+        return config
+
+    def prepare(config):
+        class Target:
+            async def activate(self, context):
+                context.provide(key, config["value"])
+
+        return Target
+
+    definition = PluginDefinition(
+        "target", prepare, provides=(key,), validate_config=validate
+    )
+
+    async def scenario():
+        async with DynamicHost() as host:
+            await host.mount("hook", PluginDefinition("hook", lambda config: Hook))
+            loader = DynamicLoader(host, PluginCatalog((definition,)))
+            await loader.create({"id": "target", "name": "target"})
+            assert host.context.require(key) == "INITIAL"
+            await loader.update("target", config={"input": "updated"})
+            assert host.context.require(key) == "UPDATED"
+            assert loader.resolve("target").config == {"input": "updated"}
+
+    asyncio.run(scenario())
+
+
 def test_group_scopes_separate_multiple_instances_of_the_same_plugin(tmp_path):
     path = tmp_path / "dynamic.yaml"
     path.write_text("""version: 2

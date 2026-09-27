@@ -88,6 +88,10 @@ TRACE = PluginDefinition("extension.trace", lambda config: TracePlugin)
 
 在组合入口 `agent_catalog(extra=(TRACE,), ...)` 显式登记，或从独立包 entry point 导出。导入、validate_config、prepare 必须没有长期副作用；prepare 可能在预检、应用和回滚中重复调用。实际资源在 activate 中创建并登记；仅有定义不会激活插件。
 
+动态配置统一由宿主准备：当前已激活的 `internal.config` hook → `validate_config` 校验与归一化 → `prepare`。hook 可以补齐原始配置中缺失的必填字段；直接 mount/reconfigure 与配置树预检使用相同顺序。`host.validate_config(id, definition, config)` 仅预检，不创建实例或获取资源；配置树仍保存原始纯数据，hook 收到独立配置副本。
+
+预检只使用当时已激活的 hook，同一棵新树内尚未激活的 hook 不参与预检。hook 可能在预检和实际应用时重复执行，应采用可重复的配置转换；预检通过后，实际应用仍按当时的已激活 hook 重新准备。无效配置在停止旧实例前拒绝。
+
 - `extend(metadata)` 派生元数据，`root` 获取根 Context；Python 类型检查使用 isinstance。`isolate(key, label)` 改变一个服务槽位，父 Context 不变。
 - `require(key)` 读取已声明依赖，`provide(key, value, check=...)` 激活时发布服务。availability 条件变化后调用 `host.refresh()`；`host.set_service(id, key, value)` 替换值并重启消费者。
 - `accessor(key, getter)` 延迟读取服务，`alias(alias_key, target_key)` 提供别名；可调用服务使用普通 Python `__call__`。共享键须由 contracts 模块导出，不能自行创建同名 token。

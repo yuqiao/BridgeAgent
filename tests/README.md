@@ -69,3 +69,7 @@
 动态依赖、作用域、事件、配置树、源码文件重载依次按单行为 red→green 实现。阶段 7.5 新增 CLI watcher、声明式外部源码清单、非模块文件通知、租约重入、effect 创建排空、归一化配置预检等先复现失败再修正。已有行为的重复重载压力与动态 CLI 回归直接通过，记录为验收，不伪造 red。
 
 测试使用真实 asyncio 同步门、临时 Python 文件与文件句柄、LangChain 图、本地 HTTP 服务和 PTY 子进程。`test_dynamic_agent.py` 反复替换模型与扩展，检查隔离分支、监听器次数和全部文件关闭。`test_dynamic_cli.py` 检查动态命令与等待输入期间的配置监听；workspace/coding CLI 同时覆盖静态和动态模式。完整证据见 docs/stages/07.5-integration.md。
+
+## 架构深化：动态配置准备
+
+2026-09-27：通过 `DynamicLoader.create/update` 验证已激活的配置 hook 可以补齐必填字段，Entry 保存原始配置。先观察到预检在 hook 前抛出 `value required`，再将预检、mount、reconfigure 的配置准备统一到宿主；该回归与已有归一化、配置 hook、volatile、veto 测试共同通过。测试继续使用已确认的公开 seam，不检查私有准备方法。

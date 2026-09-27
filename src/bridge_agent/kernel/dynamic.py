@@ -462,6 +462,33 @@ class DynamicHost:
             raise PluginProtocolError("Config hook must return a string-keyed mapping")
         return value
 
+    async def validate_config(
+        self,
+        instance_id: str,
+        definition: PluginDefinition,
+        config: Mapping[str, object],
+    ) -> None:
+        """Preflight using the active hooks and the same rules as activation."""
+        async with self._mutation():
+            await self._prepare(instance_id, definition, config)
+
+    async def _prepare(
+        self,
+        instance_id: str,
+        definition: PluginDefinition,
+        config: Mapping[str, object],
+    ) -> tuple[dict[str, object], PreparedPlugin]:
+        effective = await self._config(instance_id, deepcopy(dict(config)))
+        if definition.validate_config is not None:
+            effective = dict(definition.validate_config(effective))
+        prepared = PreparedPlugin(
+            definition.name,
+            definition.prepare(effective),
+            definition.requires,
+            definition.provides,
+        )
+        return effective, prepared
+
     def _notify(self, name: str, *args: object) -> None:
         try:
             self.context.emit(name, *args)
@@ -550,17 +577,8 @@ class DynamicHost:
             if scope._host is not self:
                 raise PluginProtocolError("Context belongs to another host")
             self._check_providers(instance_id, definition, scope)
-            config = await self._config(instance_id, config or {})
-            config = (
-                dict(definition.validate_config(config or {}))
-                if definition.validate_config
-                else dict(config or {})
-            )
-            prepared = PreparedPlugin(
-                definition.name,
-                definition.prepare(config or {}),
-                definition.requires,
-                definition.provides,
+            config, prepared = await self._prepare(
+                instance_id, definition, config or {}
             )
             self._instances[instance_id] = Instance(
                 instance_id,
@@ -676,18 +694,7 @@ class DynamicHost:
         instance = self._instances[instance_id]
         definition = definition or instance.definition
         self._check_providers(instance_id, definition, instance.scope)
-        config = await self._config(instance_id, config)
-        config = (
-            dict(definition.validate_config(config))
-            if definition.validate_config
-            else dict(config)
-        )
-        candidate = PreparedPlugin(
-            definition.name,
-            definition.prepare(config),
-            definition.requires,
-            definition.provides,
-        )
+        config, candidate = await self._prepare(instance_id, definition, config)
         if (
             not force
             and definition is instance.definition
